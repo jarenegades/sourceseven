@@ -9,7 +9,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'https://maxbearingsja.vercel.app',
   'https://maxbearingsja-git-main-chads-projects-03349a29.vercel.app',
-  'https://sourceseven.vercel.app',
+  'https://sourcesevens.vercel.app',
 ];
 
 const configuredOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
