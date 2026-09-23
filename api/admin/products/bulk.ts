@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { eq } from 'drizzle-orm';
-import { authorizeSupabaseAdmin } from '../../../src/server/auth';
-import { db } from '../../../src/server/db';
-import { categories, products } from '../../../src/server/schema';
-import { validateProductInput, type ProductValues } from '../products';
-import { isForeignKeyViolation, titleCase } from '../../../src/server/bulkProductHelpers';
+import { authorizeSupabaseAdmin } from '../../../src/server/auth.js';
+import { db } from '../../../src/server/db.js';
+import { categories, products } from '../../../src/server/schema.js';
+import { validateProductInput, type ProductValues } from '../products.js';
+import { isForeignKeyViolation, titleCase } from '../../../src/server/bulkProductHelpers.js';
 
 const MAX_BULK_ITEMS = 500;
 

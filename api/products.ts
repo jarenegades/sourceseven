@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { and, asc, count, desc, eq, ilike, or } from 'drizzle-orm';
-import { db } from '../src/server/db';
-import { productPricingSettings, products } from '../src/server/schema';
+import { db } from '../src/server/db.js';
+import { productPricingSettings, products } from '../src/server/schema.js';
 
 const PAGE_SIZE_MAX = 100;
 const PAGE_MAX = 1000;

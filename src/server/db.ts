@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import { attachDatabasePool } from '@vercel/functions';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import * as schema from './schema';
+import * as schema from './schema.js';
 
 const connectionString = process.env.DATABASE_URL;
 
