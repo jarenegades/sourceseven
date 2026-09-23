@@ -1,5 +1,6 @@
 import { Search, ShoppingCart, User, ChevronDown, Menu } from 'lucide-react';
 import { Currency, CURRENCY_INFO, getUserCurrency, setUserCurrency } from '../utils/currencyService';
+import type { ProductCategoryFilter } from '../utils/categoryIds';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,8 +15,8 @@ interface HeaderProps {
   onLoginClick: () => void;
   onLogout: () => void;
   cartCount: number;
-  selectedCategory: string;
-  onCategoryChange: (category: string) => void;
+  selectedCategory: ProductCategoryFilter;
+  onCategoryChange: (category: ProductCategoryFilter) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
   onSearchSubmit: (query: string) => void;
@@ -91,8 +92,8 @@ export function Header({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
                     <DropdownMenuItem onClick={() => onCategoryChange('all')}>All Categories</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onCategoryChange('baby')}>Mounted & Linear Units</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onCategoryChange('pharmaceutical')}>Rolling Bearings</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onCategoryChange('mounted-linear-units')}>Mounted & Linear Units</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onCategoryChange('rolling-bearings')}>Rolling Bearings</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <input
@@ -253,17 +254,17 @@ export function Header({
               All Products
             </button>
             <button
-              onClick={() => onCategoryChange('baby')}
+              onClick={() => onCategoryChange('mounted-linear-units')}
               className={`hover:bg-[#004080] rounded px-2 py-1 transition-all whitespace-nowrap ${
-                selectedCategory === 'baby' && currentPage === '/' ? 'bg-[#004080]' : ''
+                selectedCategory === 'mounted-linear-units' && currentPage === '/' ? 'bg-[#004080]' : ''
               }`}
             >
               Mounted & Linear Units
             </button>
             <button
-              onClick={() => onCategoryChange('pharmaceutical')}
+              onClick={() => onCategoryChange('rolling-bearings')}
               className={`hover:bg-[#004080] rounded px-2 py-1 transition-all whitespace-nowrap ${
-                selectedCategory === 'pharmaceutical' && currentPage === '/' ? 'bg-[#004080]' : ''
+                selectedCategory === 'rolling-bearings' && currentPage === '/' ? 'bg-[#004080]' : ''
               }`}
             >
               Rolling Bearings

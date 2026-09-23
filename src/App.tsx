@@ -30,6 +30,7 @@ import { wishlistService, WishlistItem } from './utils/wishlistService';
 import { config } from './utils/config';
 import { Currency, getUserCurrency, setUserCurrency, convertCurrency, formatCurrency, updateExchangeRates } from './utils/currencyService';
 import { authService } from './utils/authService';
+import type { ProductCategoryFilter, ProductCategoryId } from './utils/categoryIds';
 
 // Unused image imports - kept for reference only
 /* 
@@ -72,7 +73,7 @@ function AppContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [bestSellerProducts, setBestSellerProducts] = useState<Product[]>([]);
   const [onSaleProducts, setOnSaleProducts] = useState<Product[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'baby' | 'pharmaceutical'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<ProductCategoryFilter>('all');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -239,7 +240,7 @@ function AppContent() {
   };
 
   // Handle category change
-  const handleCategoryChange = (category: 'all' | 'baby' | 'pharmaceutical') => {
+  const handleCategoryChange = (category: ProductCategoryFilter) => {
     setSelectedCategory(category);
     setSelectedCategoryId(null);
     setSelectedSubcategoryId(null);
@@ -396,7 +397,7 @@ function AppContent() {
           await authService.signOut();
         }}
         selectedCategory={selectedCategory}
-        onCategoryChange={(category) => handleCategoryChange(category as 'all' | 'baby' | 'pharmaceutical')}
+        onCategoryChange={(category) => handleCategoryChange(category as ProductCategoryFilter)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onSearchSubmit={handleSearchSubmit}
@@ -455,7 +456,7 @@ function AppContent() {
                     {searchQuery ? `Search Results for "${searchQuery}"` :
                       selectedCategoryId || selectedSubcategoryId ? 'Filtered Products' :
                         selectedCategory === 'all' ? 'All Products' :
-                          selectedCategory === 'baby' ? 'Mounted & Linear Units' :
+                          selectedCategory === 'mounted-linear-units' ? 'Mounted & Linear Units' :
                             'Rolling Bearings'}
                   </h2>
                   <p className="text-sm text-gray-600 mt-1">
@@ -687,10 +688,8 @@ function AppContent() {
                   });
                   setProducts(loadedProducts);
                   setTotalProducts(count);
-                  toast.success('Product added successfully');
                 } catch (error) {
                   console.error('Failed to add product:', error);
-                  toast.error('Failed to add product');
                   throw error;
                 }
               }}
@@ -737,10 +736,9 @@ function AppContent() {
                   setBestSellerProducts(bestSellers);
                   setOnSaleProducts(onSale);
 
-                  toast.success('Product updated successfully');
                 } catch (error) {
                   console.error('Failed to update product:', error);
-                  toast.error('Failed to update product');
+                  throw error;
                 }
               }}
               onDeleteProduct={async (id) => {
@@ -765,10 +763,9 @@ function AppContent() {
                   setBestSellerProducts(bestSellers);
                   setOnSaleProducts(onSale);
 
-                  toast.success('Product deleted successfully');
                 } catch (error) {
                   console.error('Failed to delete product:', error);
-                  toast.error('Failed to delete product');
+                  throw error;
                 }
               }}
               onCreateSale={async (productId, discountPercent) => {
@@ -847,9 +844,10 @@ function AppContent() {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogTitle>Shop by Category</DialogTitle>
           <CategoryBrowser
-            onCategorySelect={(categoryId, subcategoryId) => {
-              setSelectedCategoryId(categoryId);
-              setSelectedSubcategoryId(subcategoryId);
+            onCategorySelect={(departmentId, categoryId, subcategoryId) => {
+              setSelectedCategory(departmentId as ProductCategoryFilter);
+              setSelectedCategoryId(categoryId || null);
+              setSelectedSubcategoryId(subcategoryId || null);
               setShowCategoryBrowser(false);
             }}
             onClose={() => setShowCategoryBrowser(false)}

@@ -5,15 +5,15 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { encodeBase64 } from 'https://deno.land/std@0.168.0/encoding/base64.ts';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Max-Age': '86400',
-};
+import { createCorsHeaders, isAllowedOrigin } from '../_shared/cors.ts';
 
 serve(async (req) => {
+  const corsHeaders = {
+    ...createCorsHeaders(req),
+    'Access-Control-Max-Age': '86400',
+  };
+  if (!isAllowedOrigin(req)) return new Response('Forbidden origin', { status: 403 });
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { 

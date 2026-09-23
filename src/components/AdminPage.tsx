@@ -26,6 +26,7 @@ import { currencyRatesService, CurrencyRate } from '../utils/currencyRatesServic
 import { Switch } from './ui/switch';
 import { publicAnonKey, supabaseUrl } from '../utils/supabase/info';
 import { categoriesService, StoreCategory } from '../utils/categoriesService';
+import { canonicalProductCategory } from '../utils/categoryIds';
 import { CategoryManagementPanel } from './CategoryManagementPanel';
 import { ShippingSettingsPanel } from './ShippingSettingsPanel';
 import { CommerceSettingsPanel } from './CommerceSettingsPanel';
@@ -61,7 +62,7 @@ export function AdminPage({
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'baby' | 'pharmaceutical'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'mounted-linear-units' | 'rolling-bearings'>('all');
 
   // Sales tab pagination state
   const [salesCurrentPage, setSalesCurrentPage] = useState(1);
@@ -128,7 +129,7 @@ export function AdminPage({
 
   // Bulk Delete state
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
-  const [bulkDeleteAction, setBulkDeleteAction] = useState<'baby' | 'pharmaceutical' | 'purge' | null>(null);
+  const [bulkDeleteAction, setBulkDeleteAction] = useState<'mounted-linear-units' | 'rolling-bearings' | 'purge' | null>(null);
 
   // Image migration state
   const [isMigratingImages, setIsMigratingImages] = useState(false);
@@ -141,8 +142,9 @@ export function AdminPage({
   const [newProduct, setNewProduct] = useState<any>({
     name: '',
     description: '',
-    category: 'pharmaceutical',
-    categoryId: 'deep-groove-ball-bearings',
+    category: 'rolling-bearings',
+    categoryId: '',
+    subcategoryId: '',
     price: '',
     currency: 'USD',
     costPrice: '',
@@ -500,6 +502,7 @@ export function AdminPage({
         name: editingProduct.name,
         category: editingProduct.category,
         categoryId: editingProduct.categoryId,
+        subcategoryId: editingProduct.subcategoryId,
         price: editingProduct.price,
         rating: editingProduct.rating,
         reviewCount: editingProduct.reviewCount,
@@ -546,13 +549,14 @@ export function AdminPage({
   const handleDeleteProduct = async (product: Product) => {
     if (window.confirm(`Are you sure you want to delete "${product.name}"?`)) {
       try {
-        onDeleteProduct(product.id);
+        await onDeleteProduct(product.id);
         toast.success('Product deleted successfully');
-        // Reload admin products
-        setTimeout(async () => {
+        try {
           const allProducts = await productsService.getAll();
           setAdminAllProducts(allProducts);
-        }, 500);
+        } catch (refreshError) {
+          console.error('Product was deleted, but the admin list could not refresh:', refreshError);
+        }
       } catch (error) {
         console.error('Error deleting product:', error);
         toast.error('Failed to delete product');
@@ -577,8 +581,9 @@ export function AdminPage({
       const productToAdd: Omit<Product, 'id'> = {
         name: newProduct.name,
         description: newProduct.description || '',
-        category: newProduct.category || 'pharmaceutical',
-        categoryId: newProduct.categoryId || 'deep-groove-ball-bearings',
+        category: newProduct.category || 'rolling-bearings',
+        categoryId: newProduct.categoryId || undefined,
+        subcategoryId: newProduct.subcategoryId || undefined,
         price: parseFloat(newProduct.price) || 9.99,
         currency: newProduct.currency || 'USD',
         rating: parseFloat(newProduct.rating) || 4.5,
@@ -591,14 +596,15 @@ export function AdminPage({
         stockCount: newProduct.stockCount ? parseInt(newProduct.stockCount) : undefined,
       } as Omit<Product, 'id'>;
 
-      onAddProduct(productToAdd);
+      await onAddProduct(productToAdd);
       toast.success('Product added');
       setIsAddDialogOpen(false);
       setNewProduct({
         name: '',
         description: '',
-        category: 'pharmaceutical',
-        categoryId: 'deep-groove-ball-bearings',
+        category: 'rolling-bearings',
+        categoryId: '',
+        subcategoryId: '',
         price: '',
         currency: 'USD',
         costPrice: '',
@@ -610,11 +616,12 @@ export function AdminPage({
         inStock: true,
         badge: 'none',
       });
-      // Reload admin products
-      setTimeout(async () => {
+      try {
         const allProducts = await productsService.getAll();
         setAdminAllProducts(allProducts);
-      }, 500);
+      } catch (refreshError) {
+        console.error('Product was added, but the admin list could not refresh:', refreshError);
+      }
     } catch (error) {
       console.error('Error adding product:', error);
       toast.error('Failed to add product');
@@ -782,26 +789,44 @@ export function AdminPage({
         }
 
         // Use the same live category catalogue as the storefront navigation.
-        const childCategories = catalogCategories.filter((category) => category.parent_id);
+        const parentIds = new Set(parentCategories.map((category) => category.id));
+        const childCategories = catalogCategories.filter((category) => category.parent_id && parentIds.has(category.parent_id));
         const validCategoryIds = childCategories.map((category) => category.id);
-        const defaultCategory = parentCategories.find((category) => category.id === 'pharmaceutical') || parentCategories[0];
-        const defaultCategoryId = getChildrenForParent(defaultCategory?.id || '')[0]?.id || '';
+        const defaultCategory = parentCategories.find((category) => category.id === 'rolling-bearings') || parentCategories[0];
+        const defaultCategoryId = '';
 
-        let category = defaultCategory?.id || 'pharmaceutical';
+        let category = defaultCategory?.id || 'rolling-bearings';
         let categoryId = defaultCategoryId;
+        let subcategoryId = '';
+        const rawCategory = row.category?.trim().toLowerCase();
+        const wasLegacyCategory = rawCategory === 'baby' || rawCategory === 'pharmaceutical';
+        const normalizedCategory = rawCategory && (wasLegacyCategory || rawCategory === 'rolling-bearings' || rawCategory === 'mounted-linear-units')
+          ? canonicalProductCategory(rawCategory)
+          : rawCategory;
+        if (wasLegacyCategory) {
+          warnings.push(`Row ${rowNum}: Legacy category '${rawCategory}' was mapped to '${normalizedCategory}'; legacy child IDs were not carried forward.`);
+        }
 
         // Try to use provided categoryId first
-        if (row.categoryid && validCategoryIds.includes(row.categoryid.toLowerCase())) {
+        if (!wasLegacyCategory && row.categoryid && validCategoryIds.includes(row.categoryid.toLowerCase())) {
           categoryId = row.categoryid.toLowerCase();
           category = childCategories.find((item) => item.id === categoryId)?.parent_id || category;
         }
         // Otherwise try to use provided category
-        else if (row.category && parentCategories.some((item) => item.id === row.category.toLowerCase())) {
-          category = row.category.toLowerCase();
-          categoryId = getChildrenForParent(category)[0]?.id || '';
-          if (row.categoryid) {
+        else if (normalizedCategory && parentCategories.some((item) => item.id === normalizedCategory)) {
+          category = normalizedCategory;
+          categoryId = '';
+          if (row.categoryid && !wasLegacyCategory) {
             warnings.push(`Row ${rowNum}: Invalid categoryId '${row.categoryid}', using default '${categoryId}' for ${category} category`);
           }
+        }
+
+        const grandchildCategories = catalogCategories.filter((item) => item.parent_id && childCategories.some((parent) => parent.id === item.parent_id));
+        const requestedSubcategoryId = row.subcategoryid?.trim().toLowerCase();
+        if (!wasLegacyCategory && requestedSubcategoryId) {
+          const grandchild = grandchildCategories.find((item) => item.id === requestedSubcategoryId && item.parent_id === categoryId);
+          if (grandchild) subcategoryId = grandchild.id;
+          else warnings.push(`Row ${rowNum}: Invalid subcategoryId '${row.subcategoryid}', leaving it unset.`);
         }
         // Use defaults and warn
         else {
@@ -812,6 +837,7 @@ export function AdminPage({
 
         row.category = category;
         row.categoryid = categoryId;
+        row.subcategoryid = subcategoryId;
 
         // Transform optional fields with smart defaults
         const description = row.description || '';
@@ -908,8 +934,9 @@ export function AdminPage({
           parsedData.push({
             name: row.name.trim(),
             description: description,
-            category: category as 'baby' | 'pharmaceutical',
+            category: category as 'mounted-linear-units' | 'rolling-bearings',
             categoryId: categoryId,
+            subcategoryId: subcategoryId || undefined,
             price: price,
             currency: currency,
             costPrice: costPrice,
@@ -1054,6 +1081,7 @@ export function AdminPage({
       }
 
       // Use bulk import API if available, otherwise fall back to individual adds
+      let fallbackFailureCount = 0;
       if (onBulkImport && newProducts.length > 0) {
         console.log(`🚀 Bulk importing ${newProducts.length} products to database...`);
         successCount = await onBulkImport(newProducts);
@@ -1063,10 +1091,11 @@ export function AdminPage({
         console.log(`⚠️ Bulk import not available, using individual adds...`);
         for (const product of newProducts) {
           try {
-            onAddProduct(product);
+            await onAddProduct(product);
             successCount++;
           } catch (error) {
             console.error('Error adding product:', error);
+            fallbackFailureCount++;
           }
         }
       }
@@ -1083,7 +1112,11 @@ export function AdminPage({
         message += ` (${skippedCount} duplicates skipped)`;
       }
 
-      toast.success(message);
+      if (fallbackFailureCount > 0) {
+        toast.error(`${message} ${fallbackFailureCount} products failed to save.`);
+      } else {
+        toast.success(message);
+      }
     } catch (error) {
       console.error('Bulk import error:', error);
       toast.error(`Bulk import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1191,13 +1224,14 @@ export function AdminPage({
   };
 
   const downloadTemplate = () => {
-    const template = `name,description,category,categoryId,price,currency,costPrice,stockCount,soldCount,rating,reviewCount,image,inStock,badge
-6205 Deep Groove Ball Bearing,Single-row bearing for motors and general machinery,pharmaceutical,deep-groove-ball-bearings,12.99,USD,6.50,150,87,4.5,150,,true,Best Seller
-UC205 Mounted Bearing Unit,Preassembled insert bearing unit for conveyors,baby,mounted-bearing-units,24.99,USD,15.00,200,123,4.8,200,,true,Standard
-30205 Tapered Roller Bearing,For combined radial and axial loads,pharmaceutical,tapered-roller-bearings,38.99,USD,20.00,100,45,4.7,89,,true,New
-LM12UU Linear Bearing,Ball bushing for linear motion applications,baby,linear-motion,19.99,USD,10.00,100,45,4.7,89,,true,New
-22210 Spherical Roller Bearing,Self-aligning bearing for heavy-duty equipment,pharmaceutical,spherical-roller-bearings,49.99,USD,28.00,80,22,4.8,42,,true,
-Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
+    const template = `name,description,category,categoryId,subcategoryId,price,currency,costPrice,stockCount,soldCount,rating,reviewCount,image,inStock,badge
+6205 Deep Groove Ball Bearing,Single-row bearing for motors and general machinery,rolling-bearings,deep-groove-ball-bearings,,12.99,USD,6.50,150,87,4.5,150,,true,Best Seller
+UC205 Mounted Bearing Unit,Preassembled insert bearing unit for conveyors,mounted-linear-units,mounted-bearing-units,,24.99,USD,15.00,200,123,4.8,200,,true,Standard
+30205 Tapered Roller Bearing,For combined radial and axial loads,rolling-bearings,tapered-roller-bearings,,38.99,USD,20.00,100,45,4.7,89,,true,New
+LM12UU Linear Bearing,Ball bushing for linear motion applications,mounted-linear-units,linear-motion,,19.99,USD,10.00,100,45,4.7,89,,true,New
+22210 Spherical Roller Bearing,Self-aligning bearing for heavy-duty equipment,rolling-bearings,spherical-roller-bearings,,49.99,USD,28.00,80,22,4.8,42,,true,
+Root-only category example,,rolling-bearings,,,9.99,USD,,,,,,true,
+Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,,`;
 
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -1209,7 +1243,7 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
     toast.success('Template downloaded');
   };
 
-  const handleBulkDelete = (action: 'baby' | 'pharmaceutical' | 'purge') => {
+  const handleBulkDelete = (action: 'mounted-linear-units' | 'rolling-bearings' | 'purge') => {
     setBulkDeleteAction(action);
     setIsBulkDeleteDialogOpen(true);
   };
@@ -1447,12 +1481,13 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                               <Label htmlFor="category">Category *</Label>
                               <Select
                                 value={newProduct.category}
-                                onValueChange={(value: 'baby' | 'pharmaceutical') => {
+                                onValueChange={(value: 'mounted-linear-units' | 'rolling-bearings') => {
                                   const firstChild = getChildrenForParent(value)[0];
                                   setNewProduct({
                                     ...newProduct,
                                     category: value,
                                     categoryId: firstChild?.id || '',
+                                    subcategoryId: '',
                                   });
                                 }}
                               >
@@ -1466,19 +1501,35 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                             </div>
 
                             <div className="grid gap-2">
-                              <Label htmlFor="subcategory">Subcategory *</Label>
+                              <Label htmlFor="subcategory">Product category (optional)</Label>
                               <Select
-                                value={newProduct.categoryId}
-                                onValueChange={(value) => setNewProduct({ ...newProduct, categoryId: value })}
+                                value={newProduct.categoryId || '__root_only__'}
+                                onValueChange={(value) => setNewProduct({ ...newProduct, categoryId: value === '__root_only__' ? '' : value, subcategoryId: '' })}
                               >
                                 <SelectTrigger>
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="__root_only__">Department only</SelectItem>
                                   {getChildrenForParent(newProduct.category).map((category) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             </div>
+                          </div>
+
+                          <div className="grid gap-2">
+                            <Label htmlFor="product-subcategory">Subcategory (optional)</Label>
+                            <Select
+                              value={newProduct.subcategoryId || '__no_subcategory__'}
+                              onValueChange={(value) => setNewProduct({ ...newProduct, subcategoryId: value === '__no_subcategory__' ? '' : value })}
+                              disabled={!newProduct.categoryId}
+                            >
+                              <SelectTrigger id="product-subcategory"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__no_subcategory__">No subcategory</SelectItem>
+                                {getChildrenForParent(newProduct.categoryId).map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
                           </div>
 
                           <div className="grid grid-cols-2 gap-4">
@@ -1686,12 +1737,13 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                                 <Label htmlFor="edit-category">Category *</Label>
                                 <Select
                                   value={editingProduct.category}
-                                  onValueChange={(value: 'baby' | 'pharmaceutical') => {
+                                  onValueChange={(value: 'mounted-linear-units' | 'rolling-bearings') => {
                                     const firstChild = getChildrenForParent(value)[0];
                                     setEditingProduct({
                                       ...editingProduct,
                                       category: value,
                                       categoryId: firstChild?.id || '',
+                                      subcategoryId: '',
                                     });
                                   }}
                                 >
@@ -1705,19 +1757,35 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                               </div>
 
                               <div className="grid gap-2">
-                                <Label htmlFor="edit-subcategory">Subcategory *</Label>
+                                <Label htmlFor="edit-subcategory">Product category (optional)</Label>
                                 <Select
-                                  value={editingProduct.categoryId}
-                                  onValueChange={(value) => setEditingProduct({ ...editingProduct, categoryId: value })}
+                                  value={editingProduct.categoryId || '__root_only__'}
+                                  onValueChange={(value) => setEditingProduct({ ...editingProduct, categoryId: value === '__root_only__' ? '' : value, subcategoryId: '' })}
                                 >
                                   <SelectTrigger>
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
+                                    <SelectItem value="__root_only__">Department only</SelectItem>
                                     {getChildrenForParent(editingProduct.category).map((category) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}
                                   </SelectContent>
                                 </Select>
                               </div>
+                            </div>
+
+                            <div className="grid gap-2">
+                              <Label htmlFor="edit-product-subcategory">Subcategory (optional)</Label>
+                              <Select
+                                value={editingProduct.subcategoryId || '__no_subcategory__'}
+                                onValueChange={(value) => setEditingProduct({ ...editingProduct, subcategoryId: value === '__no_subcategory__' ? '' : value })}
+                                disabled={!editingProduct.categoryId}
+                              >
+                                <SelectTrigger id="edit-product-subcategory"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__no_subcategory__">No subcategory</SelectItem>
+                                  {getChildrenForParent(editingProduct.categoryId || '').map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
                             </div>
 
                             <div className="grid grid-cols-3 gap-4">
@@ -1878,15 +1946,15 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Select value={categoryFilter} onValueChange={(value: 'all' | 'baby' | 'pharmaceutical') => setCategoryFilter(value)}>
+                      <Select value={categoryFilter} onValueChange={(value: 'all' | 'mounted-linear-units' | 'rolling-bearings') => setCategoryFilter(value)}>
                         <SelectTrigger className="w-[180px]">
                           <Filter className="h-4 w-4 mr-2" />
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Categories</SelectItem>
-                          <SelectItem value="baby">Mounted &amp; Linear Units</SelectItem>
-                          <SelectItem value="pharmaceutical">Rolling Bearings</SelectItem>
+                          <SelectItem value="mounted-linear-units">Mounted &amp; Linear Units</SelectItem>
+                          <SelectItem value="rolling-bearings">Rolling Bearings</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -2061,15 +2129,15 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Select value={categoryFilter} onValueChange={(value: 'all' | 'baby' | 'pharmaceutical') => setCategoryFilter(value)}>
+                      <Select value={categoryFilter} onValueChange={(value: 'all' | 'mounted-linear-units' | 'rolling-bearings') => setCategoryFilter(value)}>
                         <SelectTrigger className="w-[180px]">
                           <Filter className="h-4 w-4 mr-2" />
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Categories</SelectItem>
-                          <SelectItem value="baby">Mounted &amp; Linear Units</SelectItem>
-                          <SelectItem value="pharmaceutical">Rolling Bearings</SelectItem>
+                          <SelectItem value="mounted-linear-units">Mounted &amp; Linear Units</SelectItem>
+                          <SelectItem value="rolling-bearings">Rolling Bearings</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -2197,15 +2265,15 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Select value={categoryFilter} onValueChange={(value: 'all' | 'baby' | 'pharmaceutical') => setCategoryFilter(value)}>
+                      <Select value={categoryFilter} onValueChange={(value: 'all' | 'mounted-linear-units' | 'rolling-bearings') => setCategoryFilter(value)}>
                         <SelectTrigger className="w-[180px]">
                           <Filter className="h-4 w-4 mr-2" />
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Categories</SelectItem>
-                          <SelectItem value="baby">Mounted &amp; Linear Units</SelectItem>
-                          <SelectItem value="pharmaceutical">Rolling Bearings</SelectItem>
+                          <SelectItem value="mounted-linear-units">Mounted &amp; Linear Units</SelectItem>
+                          <SelectItem value="rolling-bearings">Rolling Bearings</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -2748,7 +2816,7 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                           <div>
                             <p className="text-sm text-gray-600">Mounted &amp; Linear Units</p>
                             <p className="text-2xl font-bold text-[#003366]">
-                              {products.filter(p => p.category === 'baby').length}
+                              {products.filter(p => p.category === 'mounted-linear-units').length}
                             </p>
                           </div>
                           <Package className="h-8 w-8 text-[#003366] opacity-20" />
@@ -2762,7 +2830,7 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                           <div>
                             <p className="text-sm text-gray-600">Rolling Bearings</p>
                             <p className="text-2xl font-bold text-[#DC143C]">
-                              {products.filter(p => p.category === 'pharmaceutical').length}
+                              {products.filter(p => p.category === 'rolling-bearings').length}
                             </p>
                           </div>
                           <Package className="h-8 w-8 text-[#DC143C] opacity-20" />
@@ -2796,14 +2864,14 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                           <div className="flex-1">
                             <h4 className="font-medium text-[#003366]">Delete All Mounted &amp; Linear Unit Products</h4>
                             <p className="text-sm text-gray-600 mt-1">
-                              Remove all {products.filter(p => p.category === 'baby').length} mounted or linear unit product(s) from the catalog
+                              Remove all {products.filter(p => p.category === 'mounted-linear-units').length} mounted or linear unit product(s) from the catalog
                             </p>
                           </div>
                           <Button
                             variant="outline"
                             className="border-[#003366] text-[#003366] hover:bg-[#003366] hover:text-white"
-                            onClick={() => handleBulkDelete('baby')}
-                            disabled={products.filter(p => p.category === 'baby').length === 0}
+                            onClick={() => handleBulkDelete('mounted-linear-units')}
+                            disabled={products.filter(p => p.category === 'mounted-linear-units').length === 0}
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete Units
@@ -2817,14 +2885,14 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                           <div className="flex-1">
                             <h4 className="font-medium text-[#DC143C]">Delete All Rolling Bearing Products</h4>
                             <p className="text-sm text-gray-600 mt-1">
-                              Remove all {products.filter(p => p.category === 'pharmaceutical').length} rolling bearing product(s) from the catalog
+                              Remove all {products.filter(p => p.category === 'rolling-bearings').length} rolling bearing product(s) from the catalog
                             </p>
                           </div>
                           <Button
                             variant="outline"
                             className="border-[#DC143C] text-[#DC143C] hover:bg-[#DC143C] hover:text-white"
-                            onClick={() => handleBulkDelete('pharmaceutical')}
-                            disabled={products.filter(p => p.category === 'pharmaceutical').length === 0}
+                            onClick={() => handleBulkDelete('rolling-bearings')}
+                            disabled={products.filter(p => p.category === 'rolling-bearings').length === 0}
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
                             Delete Bearings
@@ -2877,25 +2945,25 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,`;
                               This will permanently remove:
                             </p>
                             <ul className="list-disc list-inside text-sm space-y-1 ml-4">
-                              <li>{products.filter(p => p.category === 'baby').length} Mounted &amp; Linear Unit products</li>
-                              <li>{products.filter(p => p.category === 'pharmaceutical').length} Rolling Bearing products</li>
+                              <li>{products.filter(p => p.category === 'mounted-linear-units').length} Mounted &amp; Linear Unit products</li>
+                              <li>{products.filter(p => p.category === 'rolling-bearings').length} Rolling Bearing products</li>
                             </ul>
                           </div>
                         )}
-                        {bulkDeleteAction === 'baby' && (
+                        {bulkDeleteAction === 'mounted-linear-units' && (
                             <div className="space-y-2 mt-4">
                               <p className="font-medium">
-                                You are about to delete {products.filter(p => p.category === 'baby').length} mounted or linear unit product(s).
+                                You are about to delete {products.filter(p => p.category === 'mounted-linear-units').length} mounted or linear unit product(s).
                               </p>
                               <p className="text-sm text-gray-600">
                                 This will remove all products in the Mounted &amp; Linear Units category.
                               </p>
                             </div>
                           )}
-                          {bulkDeleteAction === 'pharmaceutical' && (
+                          {bulkDeleteAction === 'rolling-bearings' && (
                             <div className="space-y-2 mt-4">
                               <p className="font-medium">
-                                You are about to delete {products.filter(p => p.category === 'pharmaceutical').length} rolling bearing product(s).
+                                You are about to delete {products.filter(p => p.category === 'rolling-bearings').length} rolling bearing product(s).
                               </p>
                               <p className="text-sm text-gray-600">
                                 This will remove all products in the Rolling Bearings category.

@@ -44,5 +44,5 @@ export function bearingImageFor(id: string): string {
 }
 
 export function bearingCategoryLabel(category: string): string {
-  return category === 'baby' ? 'Mounted & Linear Units' : 'Rolling Bearings';
+  return category === 'mounted-linear-units' ? 'Mounted & Linear Units' : 'Rolling Bearings';
 }

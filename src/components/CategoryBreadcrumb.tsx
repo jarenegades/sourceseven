@@ -1,11 +1,12 @@
 import { ChevronRight, Home } from 'lucide-react';
 import { PRODUCT_CATEGORIES } from './CategoryBrowser';
+import type { ProductCategoryFilter } from '../utils/categoryIds';
 
 interface CategoryBreadcrumbProps {
-  selectedCategory: 'all' | 'baby' | 'pharmaceutical';
+  selectedCategory: ProductCategoryFilter;
   selectedCategoryId: string | null;
   selectedSubcategoryId: string | null;
-  onNavigate: (category: 'all' | 'baby' | 'pharmaceutical', categoryId?: string | null, subcategoryId?: string | null) => void;
+  onNavigate: (category: ProductCategoryFilter, categoryId?: string | null, subcategoryId?: string | null) => void;
 }
 
 export function CategoryBreadcrumb({

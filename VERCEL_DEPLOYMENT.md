@@ -18,12 +18,30 @@ Add these in Vercel → Settings → Environment Variables:
 # Supabase Configuration (REQUIRED)
 VITE_SUPABASE_URL=https://erxkwytqautexizleeov.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# Never add a Supabase service-role key to Vercel's VITE_* variables. Store it
+# only in a server-side function's private environment when a server function
+# actually requires it.
 
 # Stripe Configuration (OPTIONAL - for payments)
 VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...
 STRIPE_SECRET_KEY=sk_test_...
 ```
+
+### Neon product API (preview only until verified)
+
+The admin product API requires these server-side Vercel variables:
+
+```bash
+DATABASE_URL=postgresql://<restricted-role>:<password>@<pooled-neon-host>/<database>?sslmode=require
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY=<public-anon-key>
+```
+
+Do not use the Neon owner/migration role for `DATABASE_URL`, and never put it in a `VITE_*` variable. Keep
+`VITE_USE_NEON_PRODUCT_API=false` until the Neon category hierarchy is provisioned and both read/write routes
+pass a Vercel preview smoke test. Bulk delete and bulk CSV import now route through `/api/admin/products/bulk`
+when the flag is on; `hardDelete`, `updateStock`, `search`, and `getByCategory` in `productsService.ts` are
+unused by the current UI and still Supabase-only — port them if a caller needs them.
 
 **Where to find these:**
 - Supabase keys: Dashboard → Settings → API

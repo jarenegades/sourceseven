@@ -5,14 +5,16 @@ import { ImageWithFallback } from './figma/ImageWithFallback';
 import { Currency, convertCurrency, formatCurrency } from '../utils/currencyService';
 import { useState, useEffect } from 'react';
 import { reviewsService } from '../utils/reviewsService';
+import { ProductCategoryId } from '../utils/categoryIds';
 
 export interface Product {
   id: string;
   name: string;
   description?: string;     // Product description
-  category: 'baby' | 'pharmaceutical';
+  category: ProductCategoryId;
   categoryId?: string;
   subcategoryId?: string;
+  isActive?: boolean;
   price: number;
   originalPrice?: number;
   currency?: 'USD' | 'JMD' | 'CAD';  // Product price currency (defaults to USD)

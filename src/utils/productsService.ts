@@ -2,6 +2,71 @@ import { supabase } from './supabaseClient';
 import { Product } from '../components/ProductCard';
 import { config } from './config';
 import { commerceSettingsService } from './commerceSettingsService';
+import { canonicalProductCategory, ProductCategoryFilter, ProductCategoryId, supabaseProductCategory } from './categoryIds';
+
+const useNeonProductApi = import.meta.env.VITE_USE_NEON_PRODUCT_API === 'true';
+
+async function fetchNeonProducts(query: Record<string, string | number | undefined>) {
+  const params = new URLSearchParams();
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  });
+  const response = await fetch(`/api/products?${params.toString()}`);
+  if (!response.ok) throw new Error(`Product API request failed (${response.status})`);
+  return response.json() as Promise<{ products: any[]; count: number; product?: any }>;
+}
+
+async function getAdminAccessToken(): Promise<string> {
+  const { data, error } = await supabase.auth.getSession();
+  const accessToken = data?.session?.access_token;
+  if (error || !accessToken) throw new Error('Sign in with an administrator account to manage products');
+  return accessToken;
+}
+
+async function bulkNeonProductRequest(method: 'POST' | 'DELETE', body: unknown): Promise<any> {
+  const accessToken = await getAdminAccessToken();
+  const response = await fetch('/api/admin/products/bulk', {
+    method,
+    cache: 'no-store',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || `Bulk product request failed (${response.status})`);
+  return result;
+}
+
+async function mutateNeonProduct(
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  payload?: Partial<Product>,
+  id?: string,
+  query?: Record<string, string | number>,
+): Promise<any> {
+  const accessToken = await getAdminAccessToken();
+
+  const params = new URLSearchParams(query ? Object.entries(query).map(([key, value]) => [key, String(value)]) : []);
+  if (id) params.set('id', id);
+  const suffix = params.size ? `?${params.toString()}` : '';
+  const response = await fetch(`/api/admin/products${suffix}`, {
+    method,
+    cache: 'no-store',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(payload ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(payload ? { body: JSON.stringify(payload) } : {}),
+  });
+
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.error || `Product API request failed (${response.status})`);
+  }
+
+  return response.status === 204 ? undefined : response.json();
+}
 
 const applyPricingSettings = async (products: Product[]): Promise<Product[]> => {
   try {
@@ -38,7 +103,7 @@ export const productsService = {
   async getProducts(options: {
     page?: number;
     limit?: number;
-    category?: 'all' | 'baby' | 'pharmaceutical';
+    category?: ProductCategoryFilter;
     categoryId?: string;
     subcategoryId?: string;
     search?: string;
@@ -47,6 +112,11 @@ export const productsService = {
     try {
       const page = options.page || 1;
       const limit = options.limit || 20;
+
+      if (useNeonProductApi) {
+        const result = await fetchNeonProducts({ ...options, page, limit });
+        return { products: (result.products || []).map(this.mapToProduct), count: result.count || 0 };
+      }
 
       // Check if we're filtering or just showing all products
       const isFiltered = options.category !== 'all' || options.categoryId || options.subcategoryId || options.search;
@@ -58,7 +128,7 @@ export const productsService = {
 
       // Apply filters
       if (options.category && options.category !== 'all') {
-        query = query.eq('category', options.category);
+        query = query.eq('category', supabaseProductCategory(options.category));
       }
 
       if (options.categoryId) {
@@ -139,6 +209,21 @@ export const productsService = {
    */
   async getAll(): Promise<Product[]> {
     try {
+      if (useNeonProductApi) {
+        const allProducts: Product[] = [];
+        let page = 1;
+        let total = Number.POSITIVE_INFINITY;
+        while ((page - 1) * 100 < total) {
+          const result = await mutateNeonProduct('GET', undefined, undefined, { page, limit: 100 });
+          allProducts.push(...(result.products || []).map(this.mapToProduct));
+          total = Number(result.count) || 0;
+          if (page * 100 >= total) break;
+          if (page >= 1000) throw new Error('Admin product list exceeds the API pagination limit');
+          page += 1;
+        }
+        return allProducts;
+      }
+
       const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -161,6 +246,11 @@ export const productsService = {
    */
   async getById(id: string): Promise<Product | null> {
     try {
+      if (useNeonProductApi) {
+        const result = await fetchNeonProducts({ id });
+        return result.product ? this.mapToProduct(result.product) : null;
+      }
+
       const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -184,6 +274,11 @@ export const productsService = {
     }
 
     try {
+      if (useNeonProductApi) {
+        const result = await mutateNeonProduct('POST', product);
+        return this.mapToProduct(result.product);
+      }
+
       const productData = this.mapToSupabase(product);
 
       // Use admin client to bypass RLS policies
@@ -215,6 +310,11 @@ export const productsService = {
     }
 
     try {
+      if (useNeonProductApi) {
+        const result = await mutateNeonProduct('PATCH', updates, id);
+        return this.mapToProduct(result.product);
+      }
+
       const updateData = this.mapToSupabase(updates);
 
       // Use admin client to bypass RLS policies
@@ -248,6 +348,11 @@ export const productsService = {
     }
 
     try {
+      if (useNeonProductApi) {
+        await mutateNeonProduct('DELETE', undefined, id);
+        return;
+      }
+
       // Use admin client to bypass RLS policies
       // Soft delete by marking as inactive
       // @ts-ignore - JSR Supabase package has strict typing issues
@@ -271,6 +376,7 @@ export const productsService = {
    * Hard delete a product (permanent removal)
    */
   async hardDelete(id: string): Promise<void> {
+    if (useNeonProductApi) throw new Error('Permanent product deletion is not available through the Neon API yet');
     if (!config.useSupabase) {
       throw new Error('Supabase is disabled');
     }
@@ -301,7 +407,11 @@ export const productsService = {
    * Bulk delete products by category or all
    * More efficient than deleting one by one
    */
-  async bulkDelete(action: 'baby' | 'pharmaceutical' | 'purge'): Promise<number> {
+  async bulkDelete(action: ProductCategoryId | 'purge'): Promise<number> {
+    if (useNeonProductApi) {
+      const result = await bulkNeonProductRequest('DELETE', action === 'purge' ? { purge: true } : { category: action });
+      return result.deletedCount || 0;
+    }
     if (!config.useSupabase) {
       throw new Error('Supabase is disabled');
     }
@@ -313,7 +423,7 @@ export const productsService = {
         .select('*', { count: 'exact', head: true });
 
       if (action !== 'purge') {
-        countQuery = countQuery.eq('category', action);
+        countQuery = countQuery.eq('category', supabaseProductCategory(action));
       }
 
       const { count: countBefore } = await countQuery;
@@ -334,7 +444,7 @@ export const productsService = {
         // Using .neq('id', '') which matches all UUIDs (they're never empty strings)
         deleteQuery = deleteQuery.neq('id', '');
       } else {
-        deleteQuery = deleteQuery.eq('category', action);
+        deleteQuery = deleteQuery.eq('category', supabaseProductCategory(action));
       }
 
       const { error } = await deleteQuery;
@@ -358,7 +468,7 @@ export const productsService = {
   /**
    * Ensure category exists, create if missing
    */
-  async ensureCategory(categoryId: string, category: 'baby' | 'pharmaceutical'): Promise<void> {
+  async ensureCategory(categoryId: string, category: ProductCategoryId): Promise<void> {
     if (!categoryId) return;
 
     try {
@@ -379,7 +489,7 @@ export const productsService = {
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
 
-      const parentId = category === 'baby' ? 'baby' : 'pharmaceutical';
+      const parentId = category === 'mounted-linear-units' ? 'baby' : 'pharmaceutical';
 
       const { error } = await supabase
         .from('categories')
@@ -409,6 +519,20 @@ export const productsService = {
    * Batches inserts to handle large volumes (e.g., 200+ products)
    */
   async bulkImport(products: Omit<Product, 'id'>[]): Promise<number> {
+    if (useNeonProductApi) {
+      const CHUNK_SIZE = 200; // matches the server's 500-row cap with headroom
+      let imported = 0;
+      for (let i = 0; i < products.length; i += CHUNK_SIZE) {
+        const chunk = products.slice(i, i + CHUNK_SIZE);
+        try {
+          const result = await bulkNeonProductRequest('POST', chunk);
+          imported += result.imported || 0;
+        } catch (error) {
+          console.error(`Bulk import batch starting at row ${i + 1} failed:`, error);
+        }
+      }
+      return imported;
+    }
     if (!config.useSupabase) {
       throw new Error('Supabase is disabled');
     }
@@ -427,8 +551,8 @@ export const productsService = {
         Array.from(categoryIds).map(categoryId => {
           // Determine parent category from first product using this categoryId
           const product = products.find(p => p.categoryId === categoryId);
-          const parentCategory = product?.category || 'pharmaceutical';
-          return productsService.ensureCategory(categoryId, parentCategory as 'baby' | 'pharmaceutical');
+          const parentCategory = product?.category || 'rolling-bearings';
+          return productsService.ensureCategory(categoryId, parentCategory);
         })
       );
 
@@ -500,7 +624,7 @@ export const productsService = {
   /**
    * Search products by name or description
    */
-  async search(query: string, category?: 'baby' | 'pharmaceutical'): Promise<Product[]> {
+  async search(query: string, category?: ProductCategoryId): Promise<Product[]> {
     if (!config.useSupabase) {
       return [];
     }
@@ -512,7 +636,7 @@ export const productsService = {
         .eq('is_active', true);
 
       if (category) {
-        queryBuilder = queryBuilder.eq('category', category);
+        queryBuilder = queryBuilder.eq('category', supabaseProductCategory(category));
       }
 
       // Use full-text search if available, otherwise use ILIKE
@@ -534,7 +658,7 @@ export const productsService = {
   /**
    * Get products by category
    */
-  async getByCategory(category: 'baby' | 'pharmaceutical'): Promise<Product[]> {
+  async getByCategory(category: ProductCategoryId): Promise<Product[]> {
     if (!config.useSupabase) {
       return [];
     }
@@ -543,7 +667,7 @@ export const productsService = {
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .eq('category', category)
+        .eq('category', supabaseProductCategory(category))
         .eq('is_active', true)
         .order('rating', { ascending: false });
 
@@ -560,6 +684,7 @@ export const productsService = {
    * Update stock count
    */
   async updateStock(id: string, quantity: number): Promise<void> {
+    if (useNeonProductApi) throw new Error('Stock-only updates are not available through the Neon API yet');
     if (!config.useSupabase) {
       throw new Error('Supabase is disabled');
     }
@@ -589,7 +714,7 @@ export const productsService = {
       id: data.id,
       name: data.name,
       description: data.description || '',
-      category: data.category,
+      category: canonicalProductCategory(data.category),
       categoryId: data.category_id,
       subcategoryId: data.subcategory_id,
       price: Number(data.price),
@@ -603,6 +728,8 @@ export const productsService = {
       stockCount: data.stock_count,
       soldCount: data.sold_count,
       costPrice: data.cost_price ? Number(data.cost_price) : undefined,
+      purchaseMode: data.purchase_mode || 'price',
+      isActive: data.is_active ?? true,
     };
   },
 
@@ -614,9 +741,9 @@ export const productsService = {
 
     if (product.name !== undefined) mapped.name = product.name;
     if (product.description !== undefined) mapped.description = product.description;
-    if (product.category !== undefined) mapped.category = product.category;
-    if (product.categoryId !== undefined) mapped.category_id = product.categoryId;
-    if (product.subcategoryId !== undefined) mapped.subcategory_id = product.subcategoryId;
+    if (product.category !== undefined) mapped.category = supabaseProductCategory(product.category);
+    if (product.categoryId !== undefined) mapped.category_id = product.categoryId || null;
+    if (product.subcategoryId !== undefined) mapped.subcategory_id = product.subcategoryId || null;
     if (product.price !== undefined) mapped.price = product.price;
     if (product.originalPrice !== undefined) mapped.original_price = product.originalPrice;
     // Always set currency - default to USD if not provided
@@ -629,6 +756,7 @@ export const productsService = {
     if (product.stockCount !== undefined) mapped.stock_count = product.stockCount;
     if (product.soldCount !== undefined) mapped.sold_count = product.soldCount;
     if (product.costPrice !== undefined) mapped.cost_price = product.costPrice;
+    if (product.isActive !== undefined) mapped.is_active = product.isActive;
 
     return mapped;
   },

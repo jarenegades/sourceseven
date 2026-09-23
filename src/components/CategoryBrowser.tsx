@@ -22,7 +22,7 @@ export interface ProductCategory {
 export const PRODUCT_CATEGORIES: ProductCategory[] = [
   {
     name: 'Rolling Bearings',
-    id: 'pharmaceutical',
+    id: 'rolling-bearings',
     categories: [
       { name: 'Deep Groove Ball Bearings', id: 'deep-groove-ball-bearings' },
       { name: 'Angular Contact Ball Bearings', id: 'angular-contact-ball-bearings' },
@@ -36,7 +36,7 @@ export const PRODUCT_CATEGORIES: ProductCategory[] = [
   },
   {
     name: 'Mounted & Linear Units',
-    id: 'baby',
+    id: 'mounted-linear-units',
     categories: [
       { name: 'Mounted Bearing Units', id: 'mounted-bearing-units' },
       { name: 'Linear Motion', id: 'linear-motion' },
@@ -46,7 +46,7 @@ export const PRODUCT_CATEGORIES: ProductCategory[] = [
 ];
 
 interface CategoryBrowserProps {
-  onCategorySelect: (categoryId: string, subcategoryId?: string) => void;
+  onCategorySelect: (departmentId: string, categoryId?: string, subcategoryId?: string) => void;
   onClose: () => void;
 }
 
@@ -66,9 +66,12 @@ export function CategoryBrowser({ onCategorySelect, onClose }: CategoryBrowserPr
             name: record.name,
             categories: records
               .filter((child) => child.parent_id === record.id)
-              .map((child) => ({ id: child.id, name: child.name })),
-          }))
-          .filter((group) => group.categories.length > 0);
+              .map((child) => ({
+                id: child.id,
+                name: child.name,
+                subcategories: records.filter((leaf) => leaf.parent_id === child.id).map((leaf) => ({ id: leaf.id, name: leaf.name })),
+              })),
+          }));
 
         if (groups.length > 0) setCategories(groups);
       } catch (error) {
@@ -94,10 +97,13 @@ export function CategoryBrowser({ onCategorySelect, onClose }: CategoryBrowserPr
             <h3 className="text-[#003366] pb-2 border-b border-gray-200">
               {productCategory.name}
             </h3>
+              <button onClick={() => { onCategorySelect(productCategory.id); onClose(); }} className="w-full rounded px-3 py-2 text-left text-sm font-medium text-[#0055AA] hover:bg-blue-50">
+              All {productCategory.name}
+            </button>
             <div className="space-y-2">
               {productCategory.categories.map((category) => (
                 <div key={category.id}>
-                  {category.subcategories ? (
+                  {category.subcategories?.length ? (
                     <>
                       <button
                         onClick={() => {
@@ -125,7 +131,7 @@ export function CategoryBrowser({ onCategorySelect, onClose }: CategoryBrowserPr
                             <button
                               key={subcategory.id}
                               onClick={() => {
-                                onCategorySelect(category.id, subcategory.id);
+                                onCategorySelect(productCategory.id, category.id, subcategory.id);
                                 onClose();
                               }}
                               className="w-full text-left px-3 py-1.5 rounded hover:bg-blue-50 transition-colors text-sm text-gray-600 hover:text-[#0055AA]"
@@ -139,7 +145,7 @@ export function CategoryBrowser({ onCategorySelect, onClose }: CategoryBrowserPr
                   ) : (
                     <button
                       onClick={() => {
-                        onCategorySelect(category.id);
+                        onCategorySelect(productCategory.id, category.id);
                         onClose();
                       }}
                       className="w-full flex items-center justify-between text-left px-3 py-2 rounded hover:bg-blue-50 transition-colors group"

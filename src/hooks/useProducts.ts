@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Product } from '../components/ProductCard';
 import { productsApi } from '../utils/api';
+import { productsService } from '../utils/productsService';
 
 export function useProducts(initialProducts: Product[] = []) {
   const [products, setProducts] = useState<Product[]>(initialProducts);
@@ -94,9 +95,9 @@ export function useProducts(initialProducts: Product[] = []) {
     }
   };
 
-  const bulkDelete = async (action: 'baby' | 'pharmaceutical' | 'purge') => {
+  const bulkDelete = async (action: 'mounted-linear-units' | 'rolling-bearings' | 'purge') => {
     try {
-      const response = await productsApi.bulkDelete(action);
+      const response = { deletedCount: await productsService.bulkDelete(action) };
       await loadProducts(); // Reload all products from server
       return response.deletedCount;
     } catch (err) {

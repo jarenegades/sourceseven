@@ -22,9 +22,9 @@
     "noImplicitAny": false,
 
     /* Type Checking */
-    "types": ["vite/client"]
+    "types": ["vite/client", "node"]
   },
-  "include": ["src"],
+  "include": ["src", "api"],
   "exclude": ["node_modules", "supabase"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

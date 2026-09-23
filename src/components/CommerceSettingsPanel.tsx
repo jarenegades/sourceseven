@@ -34,7 +34,7 @@ export function CommerceSettingsPanel({ products }: { products: Product[] }) {
   const categoryOptions = useMemo(() => {
     const options = new Map<string, string>();
     products.forEach((product) => {
-      if (product.category) options.set(`department:${product.category}`, product.category === 'pharmaceutical' ? 'Rolling Bearings' : 'Mounted & Linear Units');
+      if (product.category) options.set(`department:${product.category}`, product.category === 'rolling-bearings' ? 'Rolling Bearings' : 'Mounted & Linear Units');
       if (product.categoryId) options.set(`category:${product.categoryId}`, product.categoryId.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()));
     });
     return [...options.entries()].map(([value, label]) => ({ value, label }));

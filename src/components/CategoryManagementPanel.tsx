@@ -15,7 +15,7 @@ export function CategoryManagementPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
-  const [parentId, setParentId] = useState('pharmaceutical');
+  const [parentId, setParentId] = useState('rolling-bearings');
   const [description, setDescription] = useState('');
   const [order, setOrder] = useState('0');
   const [editing, setEditing] = useState<StoreCategory | null>(null);
@@ -36,6 +36,7 @@ export function CategoryManagementPanel() {
 
   const groups = useMemo(() => categories.filter((category) => !category.parent_id), [categories]);
   const childrenFor = (id: string) => categories.filter((category) => category.parent_id === id);
+  const parentOptions = categories.filter((category) => !category.parent_id || groups.some((group) => group.id === category.parent_id));
 
   const addCategory = async () => {
     if (!name.trim()) return toast.error('Enter a category name');
@@ -79,15 +80,15 @@ export function CategoryManagementPanel() {
     <Card>
       <CardHeader>
         <CardTitle>Category Management</CardTitle>
-        <CardDescription>Create and manage the product categories shown in the storefront menu. Select a parent department to create a subcategory.</CardDescription>
+        <CardDescription>Create and manage up to three category levels: department, category, and subcategory.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-8">
         <div className="rounded-lg border bg-slate-50 p-4">
           <h3 className="font-medium text-[#003366] mb-1">Create a new category or subcategory</h3>
-          <p className="mb-4 text-sm text-slate-600">Choose the parent department where this category should appear in the shop menu.</p>
+          <p className="mb-4 text-sm text-slate-600">Choose a department or category as the parent. Categories cannot exceed three levels.</p>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="grid gap-2"><Label htmlFor="category-name">New category name</Label><Input id="category-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Insert Bearings" /></div>
-            <div className="grid gap-2"><Label>Parent department</Label><Select value={parentId} onValueChange={setParentId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{groups.map((group) => <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid gap-2"><Label>Parent category</Label><Select value={parentId} onValueChange={setParentId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{parentOptions.map((parent) => <SelectItem key={parent.id} value={parent.id}>{parent.parent_id ? `↳ ${parent.name}` : parent.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="grid gap-2"><Label htmlFor="category-description">Description (optional)</Label><Textarea id="category-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Short customer-facing description" /></div>
             <div className="grid gap-2"><Label htmlFor="category-order">Display order</Label><Input id="category-order" type="number" value={order} onChange={(event) => setOrder(event.target.value)} /></div>
           </div>
@@ -101,7 +102,7 @@ export function CategoryManagementPanel() {
               <div className="divide-y">
                 {childrenFor(group.id).map((category) => (
                   <div key={category.id} className="flex items-center justify-between gap-4 p-4">
-                    <div><p className="font-medium text-slate-900">{category.name} {!category.is_active && <span className="ml-2 text-xs font-normal text-amber-700">Archived</span>}</p>{category.description && <p className="mt-1 text-sm text-slate-500">{category.description}</p>}</div>
+                    <div><p className="font-medium text-slate-900">{category.name} {!category.is_active && <span className="ml-2 text-xs font-normal text-amber-700">Archived</span>}</p>{category.description && <p className="mt-1 text-sm text-slate-500">{category.description}</p>}{childrenFor(category.id).map((child) => <p key={child.id} className="mt-1 pl-4 text-sm text-slate-600">↳ {child.name}</p>)}</div>
                     <Button variant="outline" size="sm" onClick={() => setEditing({ ...category })}><Edit2 className="mr-2 h-4 w-4" />Edit</Button>
                   </div>
                 ))}

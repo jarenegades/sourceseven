@@ -5,8 +5,10 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY!;
+// This trusted Node script may use a service-role key, but it must be supplied
+// through a server-only environment variable, never a VITE_ browser variable.
+const SUPABASE_URL = process.env.SUPABASE_URL!;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const BUCKET = 'product-images';
 const IMAGES_DIR = path.resolve(__dirname, '../product-images');
 

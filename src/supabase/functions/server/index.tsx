@@ -5,14 +5,35 @@ import * as kv from "./kv_store.tsx";
 
 const app = new Hono();
 
+// Browser callers must be explicitly trusted. Extend this list per deployed
+// environment with the server-side ALLOWED_ORIGINS Edge Function secret
+// (comma-separated, exact origins); do not use a VITE_ variable for it.
+const defaultAllowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://maxbearingsja.vercel.app",
+  "https://maxbearingsja-git-main-chads-projects-03349a29.vercel.app",
+];
+
+const configuredAllowedOrigins = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOrigins = new Set([
+  ...defaultAllowedOrigins,
+  ...configuredAllowedOrigins,
+]);
+
 // Enable logger
 app.use('*', logger(console.log));
 
-// Enable CORS for all routes and methods
+// Enable CORS only for known frontend origins. The callback returns no
+// allow-origin header for untrusted origins, so browsers cannot read responses.
 app.use(
   "/*",
   cors({
-    origin: "*",
+    origin: (origin) => (allowedOrigins.has(origin) ? origin : ""),
     allowHeaders: ["Content-Type", "Authorization"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
