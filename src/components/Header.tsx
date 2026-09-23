@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-const logoImage = '/Max%20Bearings%20Logo.png';
+const logoImage = '/source-7-logo-navy.png';
 
 interface HeaderProps {
   isLoggedIn: boolean;
@@ -69,14 +69,14 @@ export function Header({
         <div className="max-w-[1500px] mx-auto px-2 sm:px-4">
           <div className="flex items-center justify-between gap-1.5 sm:gap-3 md:gap-6 py-2 sm:py-3">
             {/* Logo */}
-            <div 
+            <div
               onClick={() => onNavigate('home')}
               className="cursor-pointer hover:opacity-80 transition-opacity shrink-0"
             >
-              <img 
-                src={logoImage} 
-                alt="Max Bearings" 
-                className="h-10 sm:h-12 md:h-14 w-auto max-w-[100px] sm:max-w-[120px] md:max-w-[140px] object-contain"
+              <img
+                src={logoImage}
+                alt="Source Sevens"
+                className="h-8 sm:h-9 md:h-11 w-auto object-contain"
               />
             </div>
 
@@ -98,7 +98,7 @@ export function Header({
                 </DropdownMenu>
                 <input
                   type="text"
-                  placeholder="Search bearings, units and components..."
+                  placeholder="Search products we can source and ship..."
                   value={searchQuery}
                   onChange={(e) => onSearchChange(e.target.value)}
                   onKeyPress={handleSearchKeyPress}
@@ -281,7 +281,7 @@ export function Header({
               onClick={() => onNavigate('blog')}
               className={`px-3 py-3 text-sm hover:bg-[#004080] transition-colors ${currentPage === '/blog' ? 'bg-[#004080]' : ''}`}
             >
-              Bearing Guides
+              Resources
             </button>
             <button 
               onClick={() => onNavigate('contact')}

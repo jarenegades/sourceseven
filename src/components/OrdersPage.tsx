@@ -193,7 +193,7 @@ export function OrdersPage({ onProductClick }: OrdersPageProps) {
           </style>
         </head>
         <body>
-          <h1>Maxbearingsja Receipt</h1>
+          <h1>Source Sevens Receipt</h1>
           <div class="section">
             <div class="row"><strong>Order</strong><span>${order.orderNumber}</span></div>
             <div class="row"><strong>Date</strong><span>${order.date}</span></div>

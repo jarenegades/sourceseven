@@ -29,7 +29,7 @@ export function BlogPage() {
     <main className="max-w-[1200px] mx-auto px-4 py-6 md:py-12">
       <section className="bg-gradient-to-r from-[#003366] to-[#0055AA] text-white rounded-lg shadow-lg p-6 md:p-12 mb-8">
         <div className="max-w-3xl">
-          <p className="uppercase tracking-[0.18em] text-sm text-blue-100 mb-3">Max Bearings Knowledge Hub</p>
+          <p className="uppercase tracking-[0.18em] text-sm text-blue-100 mb-3">Source Sevens Knowledge Hub</p>
           <h1 className="mb-4">Bearing Guides for Smarter Purchasing</h1>
           <p className="text-lg text-blue-100 leading-relaxed">Clear answers for maintenance teams, OEM buyers and anyone sourcing industrial bearings, mounted units and linear motion components.</p>
         </div>
@@ -59,7 +59,7 @@ export function BlogPage() {
       </section>
 
       <section className="mt-8 bg-[#003366] text-white rounded-lg p-6 md:p-8 flex flex-col md:flex-row gap-5 items-start md:items-center justify-between">
-        <div><h2 className="mb-2">Need help matching a bearing?</h2><p className="text-blue-100">Send Max Bearings the marking, dimensions and equipment details for a focused sourcing conversation.</p></div>
+        <div><h2 className="mb-2">Need help matching a bearing?</h2><p className="text-blue-100">Send Source Sevens the marking, dimensions and equipment details for a focused sourcing conversation.</p></div>
         <a href="/contact" className="inline-flex items-center gap-2 bg-[#FF9900] hover:bg-[#F08000] text-[#131921] font-semibold px-5 py-3 rounded-md transition-colors">Request support <ArrowRight className="h-4 w-4" /></a>
       </section>
     </main>

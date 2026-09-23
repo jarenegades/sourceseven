@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
 import { authService } from '../utils/authService';
 import { config } from '../utils/config';
-const logoImage = '/Max%20Bearings%20Logo.png';
+const logoImage = '/source-7-icon.png';
 
 interface LoginDialogProps {
   open: boolean;
@@ -78,8 +78,8 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
           toast.error(result.error || 'Invalid email or password');
         }
       } else {
-        // Mock authentication (fallback)
-        if (signInEmail === 'admin@maxbearingsja.com' && signInPassword === 'admin123') {
+        // Mock authentication (fallback, dev-only: Vite strips this branch from production builds)
+        if (import.meta.env.DEV && signInEmail === 'admin@sourcesevens.dev' && signInPassword === 'admin123') {
           onLogin(signInEmail, true);
           toast.success('Welcome back, Admin!');
         } else {
@@ -206,9 +206,9 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex justify-center mb-4">
-            <img src={logoImage} alt="Max Bearings" className="h-20 w-auto" />
+            <img src={logoImage} alt="Source Sevens" className="h-20 w-auto" />
           </div>
-          <DialogTitle className="text-center text-[#003366]">Welcome to Max Bearings</DialogTitle>
+          <DialogTitle className="text-center text-[#003366]">Welcome to Source Sevens</DialogTitle>
           <DialogDescription className="text-center">
             Sign in or create an account to start shopping
           </DialogDescription>

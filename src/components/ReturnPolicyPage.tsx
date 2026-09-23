@@ -24,7 +24,7 @@ export function ReturnPolicyPage() {
               </p>
             </div>
             <p className="text-gray-700 mb-2">
-              At Max Bearings, we are committed to your satisfaction. We understand that sometimes products may not meet your expectations, and we want to make the return process as simple as possible.
+              At Source Sevens, we are committed to your satisfaction. We understand that sometimes products may not meet your expectations, and we want to make the return process as simple as possible.
             </p>
           </section>
 
@@ -52,7 +52,7 @@ export function ReturnPolicyPage() {
                   <h3 className="text-[#003366] mb-2">Non-Returnable Items</h3>
                   <p className="text-gray-700 mb-2">To protect quality and traceability, the following items cannot be returned:</p>
                   <ul className="list-disc list-inside text-gray-700 space-y-1 ml-4">
-                    <li>Installed, damaged or modified bearing components</li>
+                    <li>Installed, damaged or modified components</li>
                     <li>Seals or lubricated products with broken packaging</li>
                     <li>Components exposed to contamination, moisture or excessive handling</li>
                     <li>Custom-sourced or special-order components</li>
@@ -74,7 +74,7 @@ export function ReturnPolicyPage() {
                 </div>
                 <h3 className="text-[#003366] mb-2">Contact Us</h3>
                 <p className="text-sm text-gray-700">
-                  Email us at info@maxbearingsja.com or call (689) 680-1264 to initiate your return request.
+                  Email us at Sevensjamaica@gmail.com or call (876) 577-6682 to initiate your return request.
                 </p>
               </div>
 
@@ -145,7 +145,7 @@ export function ReturnPolicyPage() {
             <h2 className="text-[#003366] mb-4">Damaged or Defective Items</h2>
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-gray-700 mb-2">
-                If you receive a damaged or defective product, please contact us immediately at info@maxbearingsja.com with:
+                If you receive a damaged or defective product, please contact us immediately at Sevensjamaica@gmail.com with:
               </p>
               <ul className="list-disc list-inside text-gray-700 space-y-1 ml-4">
                 <li>Your order number</li>
@@ -169,7 +169,7 @@ export function ReturnPolicyPage() {
               <li>The product does not match the description on our website</li>
             </ul>
             <p className="text-gray-700 mt-3">
-              We recommend using a trackable shipping method and purchasing shipping insurance for valuable items. Max Bearings is not responsible for items lost or damaged during return transit.
+              We recommend using a trackable shipping method and purchasing shipping insurance for valuable items. Source Sevens is not responsible for items lost or damaged during return transit.
             </p>
           </section>
 
@@ -187,17 +187,17 @@ export function ReturnPolicyPage() {
                 If you have questions about our return policy or need assistance with a return, please contact us:
               </p>
               <div className="text-gray-700 space-y-1">
-                <p><strong>Max Bearings</strong></p>
-                <p>Email: info@maxbearingsja.com</p>
-                <p>Phone: (689) 680-1264</p>
-                <p>Address: Ocho Rios, St. Ann, Jamaica</p>
+                <p><strong>Source Sevens</strong></p>
+                <p>Email: Sevensjamaica@gmail.com</p>
+                <p>Phone: (876) 577-6682</p>
+                <p>Address: Kingston, Jamaica</p>
               </div>
             </div>
           </section>
 
           <div className="border-t border-gray-200 pt-6 mt-8">
             <p className="text-sm text-gray-500">
-              <strong>Note:</strong> Max Bearings reserves the right to refuse returns that do not meet our return policy requirements. We also reserve the right to update this policy at any time. Any changes will be posted on our website with an updated "Last Updated" date.
+              <strong>Note:</strong> Source Sevens reserves the right to refuse returns that do not meet our return policy requirements. We also reserve the right to update this policy at any time. Any changes will be posted on our website with an updated "Last Updated" date.
             </p>
           </div>
         </div>

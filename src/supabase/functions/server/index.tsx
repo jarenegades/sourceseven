@@ -13,6 +13,7 @@ const defaultAllowedOrigins = [
   "http://localhost:5173",
   "https://maxbearingsja.vercel.app",
   "https://maxbearingsja-git-main-chads-projects-03349a29.vercel.app",
+  "https://sourceseven.vercel.app",
 ];
 
 const configuredAllowedOrigins = (Deno.env.get("ALLOWED_ORIGINS") ?? "")

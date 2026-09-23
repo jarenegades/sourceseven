@@ -18,7 +18,7 @@ export function PrivacyPolicyPage() {
           <section>
             <h2 className="text-[#003366] mb-4">1. Introduction</h2>
             <p className="text-gray-700 leading-relaxed">
-              Max Bearings ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website or use our services. Please read it carefully to understand our data practices.
+              Source Sevens ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website or use our services. Please read it carefully to understand our data practices.
             </p>
           </section>
 
@@ -112,7 +112,7 @@ export function PrivacyPolicyPage() {
               <li><strong>Object:</strong> Object to processing of your personal information</li>
             </ul>
             <p className="text-gray-700 mt-4">
-              To exercise these rights, please contact us at info@maxbearingsja.com
+              To exercise these rights, please contact us at Sevensjamaica@gmail.com
             </p>
           </section>
 
@@ -158,10 +158,10 @@ export function PrivacyPolicyPage() {
                 If you have questions or concerns about this Privacy Policy or our data practices, please contact us:
               </p>
               <div className="text-gray-700 space-y-1">
-                <p><strong>Max Bearings</strong></p>
-                <p>Email: info@maxbearingsja.com</p>
-                <p>Phone: (689) 680-1264</p>
-                <p>Address: Ocho Rios, St. Ann, Jamaica</p>
+                <p><strong>Source Sevens</strong></p>
+                <p>Email: Sevensjamaica@gmail.com</p>
+                <p>Phone: (876) 577-6682</p>
+                <p>Address: Kingston, Jamaica</p>
               </div>
             </div>
           </section>

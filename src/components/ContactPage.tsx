@@ -36,8 +36,8 @@ export function ContactPage() {
         <div className="max-w-3xl">
           <h1 className="mb-4">Get In Touch</h1>
           <p className="text-lg md:text-xl text-blue-100 leading-relaxed">
-            Need help identifying a bearing or component? The Max Bearings support team can assist with orders, product 
-            information and general sourcing questions.
+            Need something sourced or shipped? The Source Sevens team can assist with orders, product
+            sourcing questions and shipping to Jamaica.
           </p>
         </div>
       </div>
@@ -50,10 +50,10 @@ export function ContactPage() {
           </div>
           <h3 className="text-[#003366] mb-2">Call Us</h3>
           <p className="text-gray-600 text-sm mb-3">
-            Speak with Max Bearings support
+            Speak with Source Sevens support
           </p>
-          <a href="tel:+16896801264" className="text-[#003366] hover:underline font-semibold">
-            (689) 680-1264
+          <a href="tel:+18765776682" className="text-[#003366] hover:underline font-semibold">
+            (876) 577-6682
           </a>
         </div>
 
@@ -63,10 +63,10 @@ export function ContactPage() {
           </div>
           <h3 className="text-[#003366] mb-2">Email Us</h3>
           <p className="text-gray-600 text-sm mb-3">
-            Max Bearings typically responds within 24 hours
+            Source Sevens typically responds within 24 hours
           </p>
-          <a href="mailto:info@maxbearingsja.com" className="text-[#FF9900] hover:underline font-semibold break-all">
-            info@maxbearingsja.com
+          <a href="mailto:Sevensjamaica@gmail.com" className="text-[#FF9900] hover:underline font-semibold break-all">
+            Sevensjamaica@gmail.com
           </a>
         </div>
 
@@ -76,15 +76,15 @@ export function ContactPage() {
           </div>
           <h3 className="text-[#003366] mb-2">Follow Us</h3>
           <p className="text-gray-600 text-sm mb-3">
-            Follow Max Bearings on Instagram
+            Follow Source Sevens on Instagram
           </p>
-          <a 
+          <a
             href="https://www.instagram.com/jarenegades/"
-            target="_blank" 
+            target="_blank"
             rel="noopener noreferrer"
             className="text-[#003366] hover:underline font-semibold"
           >
-            @maxbearingsja →
+            @jarenegades →
           </a>
         </div>
       </div>
@@ -200,16 +200,16 @@ export function ContactPage() {
         <div className="space-y-6">
           {/* Office Info */}
           <div className="bg-gradient-to-br from-blue-50 to-slate-50 rounded-lg p-6 md:p-8">
-            <h3 className="text-[#003366] mb-6">Max Bearings Information</h3>
-            
+            <h3 className="text-[#003366] mb-6">Source Sevens Information</h3>
+
             <div className="space-y-4">
               <div className="flex items-start gap-3">
                 <MapPin className="h-5 w-5 text-[#003366] mt-1 shrink-0" />
                 <div>
-                  <p className="font-semibold text-[#003366] mb-1">Max Bearings Distribution</p>
+                  <p className="font-semibold text-[#003366] mb-1">Source Sevens</p>
                   <p className="text-gray-700 text-sm">
-                    Ocho Rios, St. Ann, Jamaica<br />
-                    Serving customers worldwide
+                    Kingston, Jamaica<br />
+                    Sourcing from suppliers worldwide
                   </p>
                 </div>
               </div>
@@ -220,25 +220,21 @@ export function ContactPage() {
                   <p className="font-semibold text-[#003366] mb-1">Online Support</p>
                   <p className="text-gray-700 text-sm">
                     24/7 Online Ordering Available<br />
-                    Customer Support During Business Hours<br />
-                    Visit: www.maxbearingsja.com
+                    Customer Support During Business Hours
                   </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* FAQ Quick Links */}
-
-
           {/* About Our Service */}
           <div className="bg-[#003366] text-white rounded-lg p-6">
-            <h3 className="mb-2">About Max Bearings</h3>
+            <h3 className="mb-2">About Source Sevens</h3>
             <p className="text-sm text-blue-100 mb-3">
-              An industrial component supplier backed by practical distribution experience and responsive service.
+              A Kingston, Jamaica logistics company backed by practical sourcing experience and responsive service.
             </p>
             <p className="text-sm text-blue-100">
-              Max Bearings specializes in rolling bearings, mounted units, linear motion components and worldwide delivery.
+              Source Sevens specializes in package shipping, product sourcing and related services between overseas suppliers and Jamaica.
             </p>
           </div>
         </div>
