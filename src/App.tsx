@@ -19,6 +19,7 @@ import { ProductDetailPage } from './components/ProductDetailPage';
 import { OrdersPage } from './components/OrdersPage';
 import { WishlistPage } from './components/WishlistPage';
 import { AccountPage } from './components/AccountPage';
+import { MfaSessionGate } from './components/MfaSessionGate';
 import { AdminPage } from './components/AdminPage';
 import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { Dialog, DialogContent, DialogTitle } from './components/ui/dialog';
@@ -108,7 +109,7 @@ function AppContent() {
   // Check for existing auth session on mount and listen for changes
   useEffect(() => {
     const checkSession = async () => {
-      if (!config.useSupabase) return;
+      if (!config.useSupabase && !config.useNeonAuth) return;
 
       const user = await authService.getCurrentUser();
       if (user) {
@@ -203,7 +204,7 @@ function AppContent() {
 
   // Load cart and wishlist on login
   useEffect(() => {
-    if (isLoggedIn && config.useSupabase) {
+    if (isLoggedIn) {
       const loadUserData = async () => {
         try {
           const user = await authService.getCurrentUser();
@@ -222,6 +223,9 @@ function AppContent() {
       };
 
       loadUserData();
+    } else {
+      setCartItems([]);
+      setWishlistItems([]);
     }
   }, [isLoggedIn]);
 
@@ -856,6 +860,7 @@ function AppContent() {
       </Dialog>
 
       <Toaster />
+      <MfaSessionGate loggedIn={isLoggedIn} />
       <Footer onNavigate={(page) => {
         if (page === 'home' || page === '/') {
           navigate('/');

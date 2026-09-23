@@ -1,4 +1,4 @@
-import { Facebook, Twitter, Instagram, Mail, Phone, MapPin, ArrowRight } from 'lucide-react';
+import { Facebook, Twitter, Mail, Phone, MapPin, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 const logoImage = '/source-7-logo-cream.png';
 
@@ -43,9 +43,6 @@ export function Footer({ onNavigate }: FooterProps) {
               Package shipping and product sourcing between overseas suppliers and Jamaica. <br />
               We source it, consolidate it, and get it to your door.
             </p>
-            <div className="flex gap-4 pt-2">
-              <a href="https://www.instagram.com/jarenegades/" className="hover:text-white transition-colors"><Instagram className="h-5 w-5" /></a>
-            </div>
           </div>
 
           {/* Quick Links */}
