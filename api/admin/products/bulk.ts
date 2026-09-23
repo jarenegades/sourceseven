@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { eq } from 'drizzle-orm';
-import { authorizeSupabaseAdmin } from '../../../src/server/auth.js';
+import { authorizeAdmin } from '../../../src/server/auth.js';
 import { db } from '../../../src/server/db.js';
 import { categories, products } from '../../../src/server/schema.js';
 import { validateProductInput, type ProductValues } from '../products.js';
@@ -48,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const authorization = await authorizeSupabaseAdmin(req);
+  const authorization = await authorizeAdmin(req);
   if (authorization.authorized === false) {
     return res.status(authorization.status).json({ error: authorization.message });
   }

@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { getAuthAccessToken } from './neonAuthClient';
 import { Product } from '../components/ProductCard';
 import { config } from './config';
 import { commerceSettingsService } from './commerceSettingsService';
@@ -17,9 +18,8 @@ async function fetchNeonProducts(query: Record<string, string | number | undefin
 }
 
 async function getAdminAccessToken(): Promise<string> {
-  const { data, error } = await supabase.auth.getSession();
-  const accessToken = data?.session?.access_token;
-  if (error || !accessToken) throw new Error('Sign in with an administrator account to manage products');
+  const accessToken = await getAuthAccessToken();
+  if (!accessToken) throw new Error('Sign in with an administrator account to manage products');
   return accessToken;
 }
 

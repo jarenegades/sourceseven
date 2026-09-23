@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { getAuthAccessToken } from './neonAuthClient';
 import { canonicalCategoryRowId, supabaseCategoryRowId } from './categoryIds';
 
 export interface StoreCategory {
@@ -21,9 +22,9 @@ async function neonRequest(path: string, method = 'GET', body?: unknown, admin =
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (admin) {
-    const { data, error } = await supabase.auth.getSession();
-    if (error || !data.session?.access_token) throw new Error('Sign in with an administrator account to manage categories');
-    headers.Authorization = `Bearer ${data.session.access_token}`;
+    const accessToken = await getAuthAccessToken();
+    if (!accessToken) throw new Error('Sign in with an administrator account to manage categories');
+    headers.Authorization = `Bearer ${accessToken}`;
   }
   const response = await fetch(path, { method, headers, cache: admin ? 'no-store' : 'default', ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const result = await response.json().catch(() => ({}));

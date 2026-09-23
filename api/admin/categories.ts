@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { eq } from 'drizzle-orm';
-import { authorizeSupabaseAdmin } from '../../src/server/auth.js';
+import { authorizeAdmin } from '../../src/server/auth.js';
 import { db } from '../../src/server/db.js';
 import { categories } from '../../src/server/schema.js';
 
@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Allow', 'POST, PATCH');
     return res.status(405).json({ error: 'Method not allowed' });
   }
-  const auth = await authorizeSupabaseAdmin(req);
+  const auth = await authorizeAdmin(req);
   if (auth.authorized === false) return res.status(auth.status).json({ error: auth.message });
   const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body as Record<string, unknown> : null;
   if (!body) return res.status(400).json({ error: 'A JSON object is required' });

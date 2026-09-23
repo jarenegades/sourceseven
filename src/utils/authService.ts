@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { config } from './config';
+import { getAuthAccessToken, neonAuthClient } from './neonAuthClient';
 
 /**
  * Authentication Service - Handles user authentication with Supabase
@@ -19,6 +20,23 @@ export interface AuthResponse {
   success: boolean;
   user?: User;
   error?: string;
+  requiresEmailVerification?: boolean;
+}
+
+function normalizeAuthUser(rawUser: any): User | null {
+  if (!rawUser?.id || !rawUser?.email) return null;
+  const metadata = rawUser.user_metadata || rawUser.userMetadata || {};
+  const fullName = typeof rawUser.name === 'string' ? rawUser.name.trim() : '';
+  const nameParts = fullName.split(/\s+/).filter(Boolean);
+  return {
+    id: String(rawUser.id),
+    email: String(rawUser.email),
+    user_metadata: {
+      ...metadata,
+      first_name: metadata.first_name || nameParts[0] || '',
+      last_name: metadata.last_name || nameParts.slice(1).join(' '),
+    },
+  };
 }
 
 export const authService = {
@@ -26,14 +44,29 @@ export const authService = {
    * Sign up a new user
    */
   async signUp(email: string, password: string, metadata?: { firstName?: string; lastName?: string }): Promise<AuthResponse> {
-    if (!config.useSupabase) {
+    if (!neonAuthClient && !config.useSupabase) {
       return {
         success: false,
-        error: 'Supabase is disabled'
+        error: 'Account creation is not configured. Please try again later.'
       };
     }
 
     try {
+      if (neonAuthClient) {
+        const name = [metadata?.firstName, metadata?.lastName].filter(Boolean).join(' ').trim() || email;
+        const { data: signUpData, error: signUpError } = await neonAuthClient.getBetterAuthInstance().signUp.email({
+          email,
+          password,
+          name,
+          callbackURL: window.location.origin,
+        });
+        if (signUpError) throw signUpError;
+
+        const user = normalizeAuthUser(signUpData?.user);
+        if (!user) throw new Error('Neon Auth created the account but returned no user record');
+        const { data: sessionData } = await neonAuthClient.getSession();
+        return { success: true, user, requiresEmailVerification: !sessionData.session };
+      }
       console.log('🔵 Attempting Supabase sign up for:', email);
       
       // This project uses Supabase Auth directly. The legacy Edge Functions are not
@@ -99,14 +132,20 @@ export const authService = {
    * Sign in existing user
    */
   async signIn(email: string, password: string): Promise<AuthResponse> {
-    if (!config.useSupabase) {
+    if (!neonAuthClient && !config.useSupabase) {
       return {
         success: false,
-        error: 'Supabase is disabled'
+        error: 'Sign-in is not configured. Please try again later.'
       };
     }
 
     try {
+      if (neonAuthClient) {
+        const { data, error } = await neonAuthClient.signInWithPassword({ email, password });
+        if (error) throw error;
+        const user = normalizeAuthUser(data.user);
+        return user ? { success: true, user } : { success: false, error: 'Sign-in returned no user record' };
+      }
       // Sign in directly with Supabase Auth.
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -157,14 +196,19 @@ export const authService = {
    * Sign out current user
    */
   async signOut(): Promise<AuthResponse> {
-    if (!config.useSupabase) {
+    if (!neonAuthClient && !config.useSupabase) {
       return {
         success: false,
-        error: 'Supabase is disabled'
+        error: 'Authentication is not configured'
       };
     }
 
     try {
+      if (neonAuthClient) {
+        const { error } = await neonAuthClient.signOut();
+        if (error) throw error;
+        return { success: true };
+      }
       const { error } = await supabase.auth.signOut();
 
       if (error) throw error;
@@ -187,7 +231,18 @@ export const authService = {
    * Get current session
    */
   async getSession() {
-    if (!config.useSupabase) {
+    if (neonAuthClient) {
+      try {
+        const { data, error } = await neonAuthClient.getSession();
+        if (error) throw error;
+        return data.session;
+      } catch (error) {
+        console.error('Get Neon Auth session error:', error);
+        return null;
+      }
+    }
+
+    if (!config.useSupabase || !supabase) {
       return null;
     }
 
@@ -207,7 +262,18 @@ export const authService = {
    * Get current user
    */
   async getCurrentUser(): Promise<User | null> {
-    if (!config.useSupabase) {
+    if (neonAuthClient) {
+      try {
+        const { data, error } = await neonAuthClient.getUser();
+        if (error) throw error;
+        return normalizeAuthUser(data.user);
+      } catch (error) {
+        console.error('Get Neon Auth user error:', error);
+        return null;
+      }
+    }
+
+    if (!config.useSupabase || !supabase) {
       return null;
     }
 
@@ -246,6 +312,23 @@ export const authService = {
    * Check if user is admin
    */
   async isAdmin(): Promise<boolean> {
+    if (neonAuthClient) {
+      const token = await getAuthAccessToken();
+      if (!token) return false;
+      try {
+        const response = await fetch('/api/auth/admin-status', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        if (!response.ok) return false;
+        const result = await response.json();
+        return result.is_admin === true;
+      } catch (error) {
+        console.error('Check Neon Auth admin status error:', error);
+        return false;
+      }
+    }
+
     if (!config.useSupabase) {
       return false;
     }
@@ -355,14 +438,21 @@ export const authService = {
    * Reset password
    */
   async resetPassword(email: string): Promise<AuthResponse> {
-    if (!config.useSupabase) {
+    if (!neonAuthClient && !config.useSupabase) {
       return {
         success: false,
-        error: 'Supabase is disabled'
+        error: 'Password recovery is not configured'
       };
     }
 
     try {
+      if (neonAuthClient) {
+        const { error } = await neonAuthClient.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) throw error;
+        return { success: true };
+      }
       console.log('🔵 Attempting password reset for email:', email);
       const redirectUrl = `${window.location.origin}/reset-password`;
       console.log('🔵 Redirect URL:', redirectUrl);
@@ -404,15 +494,24 @@ export const authService = {
   /**
    * Update password for current user
    */
-  async updatePassword(newPassword: string): Promise<AuthResponse> {
-    if (!config.useSupabase) {
+  async updatePassword(newPassword: string, resetToken?: string | null): Promise<AuthResponse> {
+    if (!neonAuthClient && !config.useSupabase) {
       return {
         success: false,
-        error: 'Supabase is disabled'
+        error: 'Password updates are not configured'
       };
     }
 
     try {
+      if (neonAuthClient) {
+        if (!resetToken) return { success: false, error: 'The password reset link is invalid or expired' };
+        const { error } = await (neonAuthClient.getBetterAuthInstance() as any).resetPassword({
+          newPassword,
+          token: resetToken,
+        });
+        if (error) throw error;
+        return { success: true };
+      }
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });
@@ -435,7 +534,14 @@ export const authService = {
    * Listen to auth state changes
    */
   onAuthStateChange(callback: (user: User | null) => void) {
-    if (!config.useSupabase) {
+    if (neonAuthClient) {
+      const { data: { subscription } } = neonAuthClient.onAuthStateChange((_event, session) => {
+        callback(normalizeAuthUser(session?.user));
+      });
+      return subscription;
+    }
+
+    if (!config.useSupabase || !supabase) {
       return { unsubscribe: () => {} };
     }
 

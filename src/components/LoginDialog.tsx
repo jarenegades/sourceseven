@@ -61,9 +61,8 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
     setIsLoading(true);
 
     try {
-      if (config.useSupabase) {
-        console.log('🔵 Using Supabase Auth');
-        // Use Supabase Auth for secure authentication
+      if (config.useNeonAuth || config.useSupabase) {
+        console.log(`🔵 Using ${config.useNeonAuth ? 'Neon' : 'Supabase'} Auth`);
         const result = await authService.signIn(signInEmail, signInPassword);
         
         if (result.success && result.user) {
@@ -78,16 +77,9 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
           toast.error(result.error || 'Invalid email or password');
         }
       } else {
-        // Mock authentication (fallback, dev-only: Vite strips this branch from production builds)
-        if (import.meta.env.DEV && signInEmail === 'admin@sourcesevens.dev' && signInPassword === 'admin123') {
-          onLogin(signInEmail, true);
-          toast.success('Welcome back, Admin!');
-        } else {
-          onLogin(signInEmail, false);
-          toast.success('Signed in successfully!');
-        }
-        onOpenChange(false);
-        resetForms();
+        toast.error(import.meta.env.DEV
+          ? 'Configure Neon Auth or Supabase to sign in.'
+          : 'Sign-in is temporarily unavailable. Please try again later.');
       }
     } catch (error) {
       console.error('Sign in error:', error);
@@ -120,9 +112,8 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
     console.log('🔵 Starting sign up process for:', signUpEmail);
 
     try {
-      if (config.useSupabase) {
-        console.log('🔵 Using Supabase Auth');
-        // Use Supabase Auth for secure user registration
+      if (config.useNeonAuth || config.useSupabase) {
+        console.log(`🔵 Using ${config.useNeonAuth ? 'Neon' : 'Supabase'} Auth`);
         const result = await authService.signUp(signUpEmail, signUpPassword, {
           firstName,
           lastName,
@@ -131,28 +122,23 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
         console.log('🔵 Sign up result:', result);
         
         if (result.success && result.user) {
-          toast.success('Account created successfully! Please check your email to verify your account.', {
-            duration: 5000,
-          });
+          if (result.requiresEmailVerification) {
+            toast.success('Account created. Check your email to verify it, then sign in.', { duration: 5000 });
+          } else {
+            onLogin(result.user.email, false);
+            toast.success('Account created successfully!');
+          }
           
-          // Note: We don't auto-sign in because Supabase requires email verification
-          // User should verify email first, then sign in
           onOpenChange(false);
           resetForms();
           
-          // Switch to sign in tab to encourage them to sign in after verification
-          setActiveTab('signin');
+          if (result.requiresEmailVerification) setActiveTab('signin');
         } else {
           console.error('❌ Sign up failed:', result.error);
           toast.error(result.error || 'Failed to create account');
         }
       } else {
-        // Mock registration (fallback)
-        console.log('🔵 Using mock authentication');
-        toast.success('Account created successfully!');
-        onLogin(signUpEmail, false);
-        onOpenChange(false);
-        resetForms();
+        toast.error('Configure Neon Auth or Supabase to create a real account.');
       }
     } catch (error) {
       console.error('❌ Sign up error:', error);
@@ -174,7 +160,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
     setIsLoading(true);
 
     try {
-      if (config.useSupabase) {
+      if (config.useNeonAuth || config.useSupabase) {
         console.log('🔵 Sending password reset email');
         const result = await authService.resetPassword(resetEmail);
         
@@ -188,10 +174,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
           toast.error(result.error || 'Failed to send reset email');
         }
       } else {
-        // Mock reset (fallback)
-        toast.success('Password reset email sent! (Demo mode)');
-        setResetEmail('');
-        setActiveTab('signin');
+        toast.error('Password recovery is temporarily unavailable.');
       }
     } catch (error) {
       console.error('Reset password error:', error);
@@ -269,7 +252,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
                 </Button>
               </div>
               
-              {!config.useSupabase && (
+              {!config.useSupabase && !config.useNeonAuth && import.meta.env.DEV && (
                 <div className="text-center text-xs text-gray-600 mt-2">
                   <div>Demo mode: Use any email/password</div>
                   <div className="text-[#DC143C]">Administrator access is available by invitation.</div>
@@ -352,7 +335,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
                 {isLoading ? 'Creating account...' : 'Create Account'}
               </Button>
               
-              {config.useSupabase && (
+              {(config.useSupabase || config.useNeonAuth) && (
                 <p className="text-xs text-center text-gray-600">
                   By creating an account, you'll receive a verification email
                 </p>
@@ -395,7 +378,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
                 </Button>
               </div>
               
-              {config.useSupabase && (
+              {(config.useSupabase || config.useNeonAuth) && (
                 <p className="text-xs text-center text-gray-600">
                   We'll send you a link to reset your password
                 </p>

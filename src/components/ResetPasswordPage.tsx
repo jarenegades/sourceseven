@@ -16,7 +16,16 @@ export function ResetPasswordPage() {
   useEffect(() => {
     // Check if we have a valid session for password reset
     const checkSession = async () => {
-      if (!config.useSupabase) return;
+      if (!config.useSupabase && !config.useNeonAuth) return;
+
+      if (config.useNeonAuth) {
+        const resetToken = new URLSearchParams(window.location.search).get('token');
+        if (!resetToken) {
+          toast.error('Invalid or expired password reset link. Please request a new one.');
+          window.location.href = '/';
+        }
+        return;
+      }
 
       // Check if we have hash fragments from the email link
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
@@ -97,8 +106,9 @@ export function ResetPasswordPage() {
     setIsLoading(true);
 
     try {
-      if (config.useSupabase) {
-        const result = await authService.updatePassword(password);
+      if (config.useNeonAuth || config.useSupabase) {
+        const resetToken = new URLSearchParams(window.location.search).get('token');
+        const result = await authService.updatePassword(password, resetToken);
         
         if (result.success) {
           toast.success('Password updated successfully! You can now sign in with your new password.');
@@ -110,11 +120,7 @@ export function ResetPasswordPage() {
           toast.error(result.error || 'Failed to update password');
         }
       } else {
-        // Mock update (fallback)
-        toast.success('Password updated successfully! (Demo mode)');
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 2000);
+        toast.error('Password updates are temporarily unavailable.');
       }
     } catch (error) {
       console.error('Reset password error:', error);

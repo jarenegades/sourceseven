@@ -1,4 +1,13 @@
-import { boolean, integer, numeric, pgTable, text, timestamp, varchar } from 'drizzle-orm/pg-core';
+import { boolean, integer, numeric, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+
+export const userProfiles = pgTable('user_profiles', {
+  id: uuid('id').primaryKey(),
+  email: varchar('email', { length: 255 }),
+  firstName: varchar('first_name', { length: 100 }),
+  lastName: varchar('last_name', { length: 100 }),
+  isAdmin: boolean('is_admin').notNull().default(false),
+  neonAuthUserId: text('neon_auth_user_id').unique(),
+});
 
 export const categories = pgTable('categories', {
   id: varchar('id', { length: 50 }).primaryKey(),

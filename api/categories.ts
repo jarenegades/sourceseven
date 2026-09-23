@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { asc, eq } from 'drizzle-orm';
-import { authorizeSupabaseAdmin } from '../src/server/auth.js';
+import { authorizeAdmin } from '../src/server/auth.js';
 import { db } from '../src/server/db.js';
 import { categories } from '../src/server/schema.js';
 
@@ -12,7 +12,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const includeInactive = req.query.includeInactive === '1';
   if (includeInactive) {
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
-    const auth = await authorizeSupabaseAdmin(req);
+    const auth = await authorizeAdmin(req);
     if (auth.authorized === false) return res.status(auth.status).json({ error: auth.message });
   } else {
     res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
