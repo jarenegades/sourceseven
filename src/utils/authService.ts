@@ -128,6 +128,50 @@ export const authService = {
     }
   },
 
+  /** Verify an email/password signup with the code sent by the auth provider. */
+  async verifySignupEmail(email: string, token: string): Promise<AuthResponse> {
+    if (neonAuthClient) {
+      const { data, error } = await neonAuthClient.verifyOtp({ email, token, type: 'signup' });
+      if (error) return { success: false, error: error.message || 'Email verification failed' };
+      return { success: true, user: normalizeAuthUser(data.user) ?? undefined };
+    }
+
+    if (!config.useSupabase || !supabase) {
+      return { success: false, error: 'Email verification is not configured.' };
+    }
+
+    const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'signup' });
+    if (error) return { success: false, error: error.message || 'Email verification failed' };
+    return { success: true, user: normalizeAuthUser(data.user) ?? undefined };
+  },
+
+  /** Resend a signup verification email/code. */
+  async resendSignupVerification(email: string): Promise<AuthResponse> {
+    if (neonAuthClient) {
+      const { error } = await neonAuthClient.resend({
+        type: 'signup',
+        email,
+        options: { emailRedirectTo: window.location.origin },
+      });
+      return error
+        ? { success: false, error: error.message || 'Could not resend verification email' }
+        : { success: true };
+    }
+
+    if (!config.useSupabase || !supabase) {
+      return { success: false, error: 'Email verification is not configured.' };
+    }
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    return error
+      ? { success: false, error: error.message || 'Could not resend verification email' }
+      : { success: true };
+  },
+
   /**
    * Sign in existing user
    */

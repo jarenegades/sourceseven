@@ -18,4 +18,5 @@ const pool = new Pool({
 
 attachDatabasePool(pool);
 
+export { pool };
 export const db = drizzle(pool, { schema });

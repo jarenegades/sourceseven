@@ -36,6 +36,10 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
 
+  // Email verification state
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+
   // Reset password state
   const [resetEmail, setResetEmail] = useState('');
 
@@ -47,6 +51,8 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
     setSignUpConfirmPassword('');
     setFirstName('');
     setLastName('');
+    setVerificationEmail('');
+    setVerificationCode('');
     setResetEmail('');
   };
 
@@ -123,16 +129,15 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
         
         if (result.success && result.user) {
           if (result.requiresEmailVerification) {
-            toast.success('Account created. Check your email to verify it, then sign in.', { duration: 5000 });
+            setVerificationEmail(result.user.email);
+            setVerificationCode('');
+            toast.success('Account created. Check your email for a verification code or link.', { duration: 5000 });
           } else {
             onLogin(result.user.email, false);
             toast.success('Account created successfully!');
+            onOpenChange(false);
+            resetForms();
           }
-          
-          onOpenChange(false);
-          resetForms();
-          
-          if (result.requiresEmailVerification) setActiveTab('signin');
         } else {
           console.error('❌ Sign up failed:', result.error);
           toast.error(result.error || 'Failed to create account');
@@ -146,6 +151,65 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
     } finally {
       setIsLoading(false);
       console.log('🔵 Sign up process completed');
+    }
+  };
+
+  const handleVerifySignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verificationEmail || !verificationCode.trim()) {
+      toast.error('Enter the verification code from your email.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await authService.verifySignupEmail(verificationEmail, verificationCode.trim());
+      if (!result.success) {
+        toast.error(result.error || 'Email verification failed.');
+        return;
+      }
+
+      if (result.user) {
+        const isAdmin = await authService.isAdmin();
+        onLogin(result.user.email, isAdmin);
+        toast.success('Email verified. Your account is ready.');
+        onOpenChange(false);
+        resetForms();
+      } else {
+        setResetEmail(verificationEmail);
+        setVerificationEmail('');
+        setVerificationCode('');
+        setActiveTab('reset');
+        toast.success('Email verified. You can now request a password reset.');
+      }
+    } catch (error) {
+      console.error('Signup email verification error:', error);
+      toast.error(error instanceof Error ? error.message : 'Email verification failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendVerification = async (requestedEmail = verificationEmail) => {
+    const email = requestedEmail.trim();
+    if (!email) {
+      toast.error('Enter your email address first.');
+      return;
+    }
+    setVerificationEmail(email);
+    setIsLoading(true);
+    try {
+      const result = await authService.resendSignupVerification(email);
+      if (result.success) {
+        toast.success('If this account needs verification, a new message has been sent. Check your inbox and Spam folder.');
+      } else {
+        toast.error(result.error || 'Could not resend verification message.');
+      }
+    } catch (error) {
+      console.error('Resend signup verification error:', error);
+      toast.error(error instanceof Error ? error.message : 'Could not resend verification message.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -197,7 +261,52 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
           </DialogDescription>
         </DialogHeader>
         
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'signin' | 'signup' | 'reset')}>
+        {verificationEmail ? (
+          <form onSubmit={handleVerifySignup} className="space-y-4">
+            <div className="space-y-2 text-center">
+              <h3 className="text-lg font-semibold text-[#003366]">Verify your email</h3>
+              <p className="text-sm text-gray-600">
+                Check <span className="font-medium">{verificationEmail}</span>. If the message contains a code, enter it below; if it contains a link, click the link instead.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="signup-verification-code">Verification code</Label>
+              <Input
+                id="signup-verification-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="Enter the code from your email"
+                value={verificationCode}
+                onChange={(event) => setVerificationCode(event.target.value.trimStart())}
+                disabled={isLoading}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full bg-[#003366] hover:bg-[#002244] text-white" disabled={isLoading}>
+              {isLoading ? 'Verifying...' : 'Verify Email'}
+            </Button>
+            <div className="flex items-center justify-between text-sm">
+              <Button type="button" variant="link" className="p-0 h-auto" onClick={handleResendVerification} disabled={isLoading}>
+                Resend code or link
+              </Button>
+              <Button
+                type="button"
+                variant="link"
+                className="p-0 h-auto"
+                onClick={() => {
+                  setSignInEmail(verificationEmail);
+                  setVerificationEmail('');
+                  setVerificationCode('');
+                  setActiveTab('signin');
+                }}
+                disabled={isLoading}
+              >
+                Back to sign in
+              </Button>
+            </div>
+          </form>
+        ) : <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'signin' | 'signup' | 'reset')}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="signin">Sign In</TabsTrigger>
             <TabsTrigger value="signup">Sign Up</TabsTrigger>
@@ -251,6 +360,20 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
                   Forgot your password?
                 </Button>
               </div>
+
+              {(config.useNeonAuth || config.useSupabase) && (
+                <div className="text-center">
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="text-sm text-[#003366] hover:text-[#002244] p-0 h-auto"
+                    disabled={isLoading}
+                    onClick={() => void handleResendVerification(signInEmail)}
+                  >
+                    Didn’t receive a verification code or link?
+                  </Button>
+                </div>
+              )}
               
               {!config.useSupabase && !config.useNeonAuth && import.meta.env.DEV && (
                 <div className="text-center text-xs text-gray-600 mt-2">
@@ -385,7 +508,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
               )}
             </form>
           </TabsContent>
-        </Tabs>
+        </Tabs>}
       </DialogContent>
     </Dialog>
   );

@@ -2,7 +2,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createClient } from '@supabase/supabase-js';
 import type { VercelRequest } from '@vercel/node';
 import { eq } from 'drizzle-orm';
-import { db } from './db.js';
+import { db, pool } from './db.js';
 import { userProfiles } from './schema.js';
 
 export type RequestAuthorization =
@@ -44,11 +44,21 @@ export async function authenticateRequest(req: VercelRequest): Promise<RequestAu
     }
 
     try {
-      const [profile] = await db.select({ isAdmin: userProfiles.isAdmin })
+      let [profile] = await db.select({ id: userProfiles.id, isAdmin: userProfiles.isAdmin })
         .from(userProfiles)
         .where(eq(userProfiles.neonAuthUserId, neonUserId))
         .limit(1);
 
+
+      // If an app profile was accidentally removed, recreate it from the
+      // authoritative Neon Auth identity before account APIs use the mapping.
+      if (!profile) {
+        await pool.query('SELECT public.ensure_neon_auth_user_profile($1)', [neonUserId]);
+        [profile] = await db.select({ id: userProfiles.id, isAdmin: userProfiles.isAdmin })
+          .from(userProfiles)
+          .where(eq(userProfiles.neonAuthUserId, neonUserId))
+          .limit(1);
+      }
       return { authorized: true, userId: neonUserId, isAdmin: profile?.isAdmin === true };
     } catch (error) {
       console.error('Neon Auth profile lookup failed:', error instanceof Error ? error.message : 'unknown error');
