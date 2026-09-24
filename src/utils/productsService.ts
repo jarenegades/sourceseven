@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { getAuthAccessToken } from './neonAuthClient';
+import { getAuthAccessToken, getNeonAuthSessionId } from './neonAuthClient';
 import { Product } from '../components/ProductCard';
 import { config } from './config';
 import { commerceSettingsService } from './commerceSettingsService';
@@ -25,11 +25,13 @@ async function getAdminAccessToken(): Promise<string> {
 
 async function bulkNeonProductRequest(method: 'POST' | 'DELETE', body: unknown): Promise<any> {
   const accessToken = await getAdminAccessToken();
+  const sessionId = await getNeonAuthSessionId();
   const response = await fetch('/api/admin/products/bulk', {
     method,
     cache: 'no-store',
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      ...(sessionId ? { 'X-Neon-Session-Id': sessionId } : {}),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
@@ -46,6 +48,7 @@ async function mutateNeonProduct(
   query?: Record<string, string | number>,
 ): Promise<any> {
   const accessToken = await getAdminAccessToken();
+  const sessionId = await getNeonAuthSessionId();
 
   const params = new URLSearchParams(query ? Object.entries(query).map(([key, value]) => [key, String(value)]) : []);
   if (id) params.set('id', id);
@@ -55,6 +58,7 @@ async function mutateNeonProduct(
     cache: 'no-store',
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      ...(sessionId ? { 'X-Neon-Session-Id': sessionId } : {}),
       ...(payload ? { 'Content-Type': 'application/json' } : {}),
     },
     ...(payload ? { body: JSON.stringify(payload) } : {}),
@@ -524,12 +528,12 @@ export const productsService = {
       let imported = 0;
       for (let i = 0; i < products.length; i += CHUNK_SIZE) {
         const chunk = products.slice(i, i + CHUNK_SIZE);
-        try {
-          const result = await bulkNeonProductRequest('POST', chunk);
-          imported += result.imported || 0;
-        } catch (error) {
-          console.error(`Bulk import batch starting at row ${i + 1} failed:`, error);
+        const result = await bulkNeonProductRequest('POST', chunk);
+        const batchImported = Number(result.imported);
+        if (!Number.isSafeInteger(batchImported) || batchImported !== chunk.length) {
+          throw new Error(`Neon imported ${Number.isSafeInteger(batchImported) ? batchImported : 0} of ${chunk.length} products in batch ${Math.floor(i / CHUNK_SIZE) + 1}; ${imported} earlier products may already have been saved`);
         }
+        imported += batchImported;
       }
       return imported;
     }

@@ -1333,7 +1333,7 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,,`;
 
         {/* Data Management Panel */}
         <div className="mb-6">
-          <DataManagementPanel products={products} />
+          <DataManagementPanel />
 
           {/* Image Migration Button */}
           {products.some(p => p.image && p.image.includes('dropbox.com') && !p.image.includes('supabase.co')) && (

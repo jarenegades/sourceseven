@@ -1,211 +1,121 @@
-import { Product } from '../components/ProductCard';
-import { productsApi } from './api';
-import { config } from './config';
+import Papa from 'papaparse';
+import { getNeonAuthHeaders } from './neonAuthClient';
+
+type AdminProductsResponse = {
+  products: Array<Record<string, any>>;
+  count: number;
+  page: number;
+  limit: number;
+};
+
+const PAGE_SIZE = 100;
+
+async function fetchAdminProducts(page: number, limit = PAGE_SIZE): Promise<AdminProductsResponse> {
+  const headers = await getNeonAuthHeaders();
+  if (!headers.Authorization) {
+    throw new Error('Sign in with an administrator account to access Neon product data');
+  }
+
+  const query = new URLSearchParams({ page: String(page), limit: String(limit) });
+  const response = await fetch(`/api/admin/products?${query}`, {
+    method: 'GET',
+    cache: 'no-store',
+    headers,
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.error || `Neon admin API request failed (${response.status})`);
+  }
+  return result as AdminProductsResponse;
+}
+
+async function fetchAllAdminProducts(): Promise<AdminProductsResponse['products']> {
+  const products: AdminProductsResponse['products'] = [];
+  let page = 1;
+  let total = Number.POSITIVE_INFINITY;
+
+  while ((page - 1) * PAGE_SIZE < total) {
+    const result = await fetchAdminProducts(page);
+    products.push(...(result.products || []));
+    total = Number(result.count) || 0;
+    if (page * PAGE_SIZE >= total) break;
+    if (page >= 1000) throw new Error('Neon product export exceeds the API pagination limit');
+    page += 1;
+  }
+
+  if (products.length !== total) {
+    throw new Error(`Neon export was incomplete (${products.length} of ${total} products fetched)`);
+  }
+  return products;
+}
 
 export const dataSync = {
-  /**
-   * Migrate local products to Supabase
-   * Call this once to move your existing products to the database
-   */
-  migrateToSupabase: async (localProducts: Product[]) => {
-    if (!config.useSupabase) {
-      throw new Error('Supabase is not enabled. Set useSupabase: true in /utils/config.ts');
-    }
-
+  checkNeonHealth: async () => {
     try {
-      console.log(`Starting migration of ${localProducts.length} products...`);
-      
-      // Check if products already exist in database
-      const existingProducts = await productsApi.getAll();
-      
-      if (existingProducts.length > 0) {
-        console.warn(`Database already contains ${existingProducts.length} products.`);
-        console.warn('Migration cancelled to prevent duplicates.');
-        return {
-          success: false,
-          message: 'Database already has products. Clear it first or skip migration.',
-          existingCount: existingProducts.length,
-        };
-      }
-
-      // Bulk import all local products
-      const result = await productsApi.bulkImport(localProducts);
-      
-      console.log(`✅ Successfully migrated ${result.count} products to Supabase`);
-      
-      return {
-        success: true,
-        message: `Successfully migrated ${result.count} products`,
-        count: result.count,
-      };
-    } catch (error) {
-      console.error('Migration failed:', error);
-      return {
-        success: false,
-        message: `Migration failed: ${error}`,
-        error,
-      };
-    }
-  },
-
-  /**
-   * Export all products from Supabase to downloadable CSV
-   */
-  exportToCSV: async () => {
-    try {
-      const products = await productsApi.getAll();
-      
-      if (products.length === 0) {
-        return {
-          success: false,
-          message: 'No products to export',
-        };
-      }
-
-      // Create CSV content
-      const headers = [
-        'name', 'description', 'category', 'categoryId', 'price',
-        'costPrice', 'stockCount', 'soldCount', 'rating', 'reviewCount',
-        'image', 'inStock', 'badge'
-      ];
-
-      const rows = products.map(p => [
-        `"${p.name || ''}"`,
-        `"${p.description || ''}"`,
-        p.category,
-        p.categoryId,
-        p.price,
-        p.costPrice || '',
-        p.stockCount || '',
-        p.soldCount || 0,
-        p.rating,
-        p.reviewCount,
-        `"${p.image || ''}"`,
-        p.inStock ? 'true' : 'false',
-        p.badge || '',
-      ]);
-
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.join(','))
-      ].join('\n');
-
-      // Create download
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `products-export-${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-
-      return {
-        success: true,
-        message: `Exported ${products.length} products`,
-        count: products.length,
-      };
-    } catch (error) {
-      console.error('Export failed:', error);
-      return {
-        success: false,
-        message: `Export failed: ${error}`,
-        error,
-      };
-    }
-  },
-
-  /**
-   * Check if Supabase is available and responding
-   */
-  checkSupabaseHealth: async () => {
-    if (!config.useSupabase) {
-      return {
-        available: false,
-        message: 'Supabase is disabled in config',
-      };
-    }
-
-    try {
-      const { supabase } = await import('./supabaseClient');
-      // Query Supabase directly to get the actual product count
-      const { count, error } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
-
-      if (error) throw error;
-
+      const result = await fetchAdminProducts(1, 1);
       return {
         available: true,
-        message: 'Supabase is connected and responding',
-        productCount: count || 0,
+        message: 'Neon Postgres is connected and responding',
+        productCount: Number(result.count) || 0,
       };
     } catch (error) {
       return {
         available: false,
-        message: `Supabase is not responding: ${error}`,
-        error,
+        message: error instanceof Error ? error.message : 'Neon Postgres is not responding',
       };
     }
   },
 
-  /**
-   * Sync local state with Supabase
-   * Useful for keeping data in sync
-   */
-  syncWithSupabase: async (localProducts: Product[]) => {
-    if (!config.useSupabase) {
-      return {
-        success: false,
-        message: 'Supabase not enabled',
-      };
-    }
-
+  exportToCSV: async () => {
     try {
-      const remoteProducts = await productsApi.getAll();
-      
-      return {
-        success: true,
-        local: localProducts.length,
-        remote: remoteProducts.length,
-        inSync: localProducts.length === remoteProducts.length,
-        products: remoteProducts,
-      };
+      const products = await fetchAllAdminProducts();
+      if (products.length === 0) {
+        return { success: false, message: 'No Neon products to export' };
+      }
+
+      const fields = [
+        'name', 'description', 'category', 'categoryId', 'subcategoryId', 'price',
+        'costPrice', 'stockCount', 'soldCount', 'rating', 'reviewCount', 'image',
+        'inStock', 'badge', 'currency',
+      ];
+      const rows = products.map((product) => ({
+        name: product.name ?? '',
+        description: product.description ?? '',
+        category: product.category ?? '',
+        categoryId: product.category_id ?? '',
+        subcategoryId: product.subcategory_id ?? '',
+        price: product.price ?? '',
+        costPrice: product.cost_price ?? '',
+        stockCount: product.stock_count ?? '',
+        soldCount: product.sold_count ?? 0,
+        rating: product.rating ?? 0,
+        reviewCount: product.review_count ?? 0,
+        image: product.image_url ?? '',
+        inStock: product.in_stock ?? false,
+        badge: product.badge ?? '',
+        currency: product.currency ?? 'USD',
+      }));
+
+      const csvContent = Papa.unparse({ fields, data: rows });
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `neon-products-export-${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+
+      return { success: true, message: `Exported ${products.length} Neon products`, count: products.length };
     } catch (error) {
       return {
         success: false,
-        message: `Sync failed: ${error}`,
+        message: `Neon export failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         error,
       };
     }
   },
 };
 
-/**
- * Helper to determine data source
- */
-export function getDataSource(): 'supabase' | 'local' {
-  return config.useSupabase ? 'supabase' : 'local';
-}
-
-/**
- * Log current data storage configuration
- */
-export function logDataConfig() {
-  console.log('═══════════════════════════════════════');
-  console.log('  Nex-Gen Shipping - Data Configuration');
-  console.log('═══════════════════════════════════════');
-  console.log(`Data Source: ${getDataSource().toUpperCase()}`);
-  console.log(`Supabase Enabled: ${config.useSupabase}`);
-  console.log(`Debug Mode: ${config.debugMode}`);
-  console.log('═══════════════════════════════════════');
-  
-  if (config.useSupabase) {
-    console.log('✅ Using Supabase backend for persistent storage');
-    console.log('📊 Data will persist across sessions and devices');
-  } else {
-    console.log('💻 Using local state only');
-    console.log('⚠️  Data will be lost on page refresh');
-  }
-  console.log('═══════════════════════════════════════');
+export function getDataSource(): 'neon' {
+  return 'neon';
 }

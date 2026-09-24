@@ -1,98 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Upload, Download, Database, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Download, Database, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { dataSync, getDataSource } from '../utils/dataSync';
-import { Product } from './ProductCard';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from './ui/alert';
-import { config } from '../utils/config';
-import { supabase } from '../utils/supabaseClient';
 
-interface DataManagementPanelProps {
-  products: Product[];
-}
-
-export function DataManagementPanel({ products }: DataManagementPanelProps) {
+export function DataManagementPanel() {
   const [isChecking, setIsChecking] = useState(false);
-  const [isMigrating, setIsMigrating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [healthStatus, setHealthStatus] = useState<any>(null);
+  const [healthStatus, setHealthStatus] = useState<Awaited<ReturnType<typeof dataSync.checkNeonHealth>> | null>(null);
   const [totalDatabaseProducts, setTotalDatabaseProducts] = useState<number | null>(null);
   const [isLoadingCount, setIsLoadingCount] = useState(true);
-
   const dataSource = getDataSource();
 
-  // Fetch total product count from database on mount
+  const checkConnection = useCallback(async () => {
+    setIsChecking(true);
+    const result = await dataSync.checkNeonHealth();
+    setHealthStatus(result);
+    setTotalDatabaseProducts(result.available ? result.productCount : null);
+    setIsChecking(false);
+    return result;
+  }, []);
+
   useEffect(() => {
-    const fetchTotalCount = async () => {
-      if (!config.useSupabase) {
-        setIsLoadingCount(false);
-        return;
-      }
-
-      try {
-        const { count, error } = await supabase
-          .from('products')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_active', true);
-
-        if (error) throw error;
-        setTotalDatabaseProducts(count || 0);
-      } catch (error) {
-        console.error('Failed to fetch total product count:', error);
-      } finally {
-        setIsLoadingCount(false);
-      }
-    };
-
-    fetchTotalCount();
+    let active = true;
+    dataSync.checkNeonHealth().then((result) => {
+      if (!active) return;
+      setHealthStatus(result);
+      setTotalDatabaseProducts(result.available ? result.productCount : null);
+      setIsLoadingCount(false);
+    });
+    return () => { active = false; };
   }, []);
 
   const handleHealthCheck = async () => {
-    setIsChecking(true);
-    const result = await dataSync.checkSupabaseHealth();
-    setHealthStatus(result);
-    setIsChecking(false);
-    
+    const result = await checkConnection();
     if (result.available) {
-      toast.success(`Supabase connected - ${result.productCount} products in database`);
-      // Update total count when health check runs
-      setTotalDatabaseProducts(result.productCount);
-    } else {
-      toast.error(result.message);
-    }
-  };
-
-  const handleMigrate = async () => {
-    if (products.length === 0) {
-      toast.error('No products to migrate');
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Migrate ${products.length} products to Supabase?\n\n` +
-      `This will upload all current products to the cloud database.\n\n` +
-      `Continue?`
-    );
-
-    if (!confirmed) return;
-
-    setIsMigrating(true);
-    const result = await dataSync.migrateToSupabase(products);
-    setIsMigrating(false);
-
-    if (result.success) {
-      toast.success(result.message);
-      // Refresh the total count after migration
-      const { count, error } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
-      if (!error) {
-        setTotalDatabaseProducts(count || 0);
-      }
+      toast.success(`Neon Postgres connected — ${result.productCount} products`);
     } else {
       toast.error(result.message);
     }
@@ -102,85 +48,51 @@ export function DataManagementPanel({ products }: DataManagementPanelProps) {
     setIsExporting(true);
     const result = await dataSync.exportToCSV();
     setIsExporting(false);
-
     if (result.success) {
       toast.success(result.message);
-      // Refresh the total count after export
-      const { count, error } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
-      if (!error) {
-        setTotalDatabaseProducts(count || 0);
-      }
     } else {
       toast.error(result.message);
     }
   };
 
-  if (!config.useSupabase) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Data Management</CardTitle>
-          <CardDescription>Manage your product data</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Alert className="bg-blue-50 border-blue-200">
-            <Database className="h-5 w-5 text-blue-600" />
-            <AlertDescription className="text-blue-800">
-              <strong>Local Mode Active</strong>
-              <p className="mt-2 text-sm">
-                You're currently using local storage only. Data will be lost on page refresh.
-                To enable persistent cloud storage, set <code className="bg-blue-100 px-1 rounded">useSupabase: true</code> in <code className="bg-blue-100 px-1 rounded">/utils/config.ts</code>
-              </p>
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <div>
             <CardTitle>Data Management</CardTitle>
-            <CardDescription>Sync and manage your product data with Supabase</CardDescription>
+            <CardDescription>Check and export catalog data from Neon Postgres</CardDescription>
           </div>
           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
             <Database className="h-3 w-3 mr-1" />
-            Supabase Mode
+            Neon Postgres
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Health Status */}
         {healthStatus && (
-          <Alert className={healthStatus.available ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}>
+          <Alert className={healthStatus.available ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}>
             {healthStatus.available ? (
               <CheckCircle2 className="h-5 w-5 text-green-600" />
             ) : (
               <AlertCircle className="h-5 w-5 text-red-600" />
             )}
-            <AlertDescription className={healthStatus.available ? "text-green-800" : "text-red-800"}>
+            <AlertDescription className={healthStatus.available ? 'text-green-800' : 'text-red-800'}>
               <strong>{healthStatus.message}</strong>
-              {healthStatus.productCount !== undefined && (
-                <p className="text-sm mt-1">Database contains {healthStatus.productCount} products</p>
+              {healthStatus.available && (
+                <p className="text-sm mt-1">Neon catalog contains {healthStatus.productCount} products</p>
               )}
             </AlertDescription>
           </Alert>
         )}
 
-        {/* Current Status */}
         <div className="grid grid-cols-2 gap-4">
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
-                <p className="text-sm text-gray-600 mb-1">Database Products</p>
+                <p className="text-sm text-gray-600 mb-1">Neon Catalog Products</p>
                 <p className="text-2xl font-bold text-[#003366]">
-                  {isLoadingCount ? '...' : totalDatabaseProducts || 0}
+                  {isLoadingCount ? '...' : totalDatabaseProducts ?? '—'}
                 </p>
               </div>
             </CardContent>
@@ -195,75 +107,29 @@ export function DataManagementPanel({ products }: DataManagementPanelProps) {
           </Card>
         </div>
 
-        {/* Actions */}
-        <div className="space-y-3">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={handleHealthCheck}
-              disabled={isChecking}
-            >
-              {isChecking ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Checking...
-                </>
-              ) : (
-                <>
-                  <Database className="h-4 w-4 mr-2" />
-                  Check Connection
-                </>
-              )}
-            </Button>
-
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={handleExport}
-              disabled={isExporting}
-            >
-              {isExporting ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4 mr-2" />
-                  Export CSV
-                </>
-              )}
-            </Button>
-          </div>
-
-          <Button
-            variant="outline"
-            className="w-full border-[#003366] text-[#003366] hover:bg-[#003366] hover:text-white"
-            onClick={handleMigrate}
-            disabled={isMigrating || products.length === 0}
-          >
-            {isMigrating ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Migrating...
-              </>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button variant="outline" className="flex-1" onClick={handleHealthCheck} disabled={isChecking}>
+            {isChecking ? (
+              <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Checking...</>
             ) : (
-              <>
-                <Upload className="h-4 w-4 mr-2" />
-                Migrate {totalDatabaseProducts !== null && totalDatabaseProducts > 0 ? totalDatabaseProducts : products.length} Products to Supabase
-              </>
+              <><Database className="h-4 w-4 mr-2" />Check Neon Connection</>
+            )}
+          </Button>
+          <Button variant="outline" className="flex-1" onClick={handleExport} disabled={isExporting}>
+            {isExporting ? (
+              <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Exporting...</>
+            ) : (
+              <><Download className="h-4 w-4 mr-2" />Export Neon CSV</>
             )}
           </Button>
         </div>
 
-        {/* Info */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <p className="text-sm text-blue-800">
-            <strong>💡 Tip:</strong> Use "Migrate to Supabase" once to upload your current products to the cloud.
-            After migration, all new products will automatically be saved to Supabase.
-          </p>
-        </div>
+        <Alert className="bg-blue-50 border-blue-200">
+          <Database className="h-4 w-4 text-blue-700" />
+          <AlertDescription className="text-blue-800">
+            Product creation and CSV imports are managed from the Product Catalog and require an authenticated Neon administrator. This panel is read-only; it does not copy legacy Supabase data.
+          </AlertDescription>
+        </Alert>
       </CardContent>
     </Card>
   );
