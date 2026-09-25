@@ -77,11 +77,12 @@ export function verifyTotp(secret: string, supplied: unknown, now = Date.now()):
 }
 
 export async function getActiveNeonSession(neonUserId: string, sessionId: string | null) {
-  if (!sessionId || sessionId.length > 256) return null;
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!sessionId || !uuidPattern.test(sessionId) || !uuidPattern.test(neonUserId)) return null;
   const result = await pool.query<{ id: string; expires_at: Date | string }>(
     `SELECT id, "expiresAt" AS expires_at
      FROM neon_auth."session"
-     WHERE id = $1 AND "userId" = $2 AND "expiresAt" > NOW()
+     WHERE id = $1::uuid AND "userId" = $2::uuid AND "expiresAt" > NOW()
      LIMIT 1`, [sessionId, neonUserId],
   );
   return result.rows[0] ?? null;
