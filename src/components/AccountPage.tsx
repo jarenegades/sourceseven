@@ -9,7 +9,11 @@ import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
 import { useState, useEffect } from 'react';
 import { accountApi } from '../utils/accountApi';
 import { authService } from '../utils/authService';
+import { ordersService } from '../utils/ordersService';
+import { wishlistService } from '../utils/wishlistService';
 import { userService } from '../utils/userService';
+import { authSessionsService, AuthSessionSummary } from '../utils/authSessionsService';
+import { paymentMethodsService, SavedPaymentMethod } from '../utils/paymentMethodsService';
 import { userNotificationPreferencesService } from '../utils/userNotificationPreferencesService';
 import { toast } from 'sonner';
 
@@ -31,6 +35,15 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
   const [loading, setLoading] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarUpdating, setAvatarUpdating] = useState(false);
+  const [sessions, setSessions] = useState<AuthSessionSummary[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaSecret, setMfaSecret] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaBusy, setMfaBusy] = useState(false);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [savedPaymentMethods, setSavedPaymentMethods] = useState<SavedPaymentMethod[]>([]);
+  const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(false);
   const [userId, setUserId] = useState<string>('');
   const [accountInfo, setAccountInfo] = useState({
     firstName: '',
@@ -83,7 +96,7 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
         setAccountInfo({
           firstName: profile.first_name || '',
           lastName: profile.last_name || '',
-          email: profile.email || user.email || '',
+          email: user.email || '',
           phone: profile.phone || '',
         });
 
@@ -116,17 +129,17 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
       }
 
       // Load order stats
-      const { stats } = await accountApi<{ stats: { total: number } }>('orders', { query: { stats: '1' } });
+      const stats = await ordersService.getStats(user.id);
       setAccountStats(prev => ({
         ...prev,
         totalOrders: stats.total
       }));
 
       // Load wishlist count
-      const { items: wishlistItems } = await accountApi<{ items: unknown[] }>('wishlist');
+      const wishlistCount = await wishlistService.getCount(user.id);
       setAccountStats(prev => ({
         ...prev,
-        wishlistItems: wishlistItems.length
+        wishlistItems: wishlistCount
       }));
 
       const notificationPreferences = await userNotificationPreferencesService.get();
@@ -137,6 +150,31 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
           newsletter: notificationPreferences.newsletter,
           smsAlerts: notificationPreferences.sms_alerts,
         });
+      }
+
+      if (import.meta.env.VITE_NEON_AUTH_URL) {
+        try {
+          const mfa = await accountApi<{ enabled: boolean }>('mfa');
+          setMfaEnabled(mfa.enabled);
+        } catch (error) {
+          console.error('Could not load two-factor status:', error);
+        }
+        setPaymentMethodsLoading(true);
+        try {
+          setSavedPaymentMethods(await paymentMethodsService.list());
+        } catch (error) {
+          console.error('Could not load saved payment methods:', error);
+        } finally {
+          setPaymentMethodsLoading(false);
+        }
+        setSessionsLoading(true);
+        try {
+          setSessions(await authSessionsService.list());
+        } catch (error) {
+          console.error('Could not load Neon Auth sessions:', error);
+        } finally {
+          setSessionsLoading(false);
+        }
       }
 
       console.log('✅ User data loaded successfully');
@@ -187,12 +225,12 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
     e.preventDefault();
     
     try {
-        if (!userId) throw new Error('User not authenticated');
-        await userService.updateProfile(userId, {
-            first_name: accountInfo.firstName,
-            last_name: accountInfo.lastName,
-            phone: accountInfo.phone,
-        });
+      if (!userId) throw new Error('User not authenticated');
+      await userService.updateProfile(userId, {
+        first_name: accountInfo.firstName,
+        last_name: accountInfo.lastName,
+        phone: accountInfo.phone,
+      });
 
       toast.success('Profile updated successfully!');
       console.log('✅ Profile updated');
@@ -206,16 +244,16 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
     e.preventDefault();
     
     try {
-        await accountApi('addresses', {
-          method: 'PUT',
-          body: {
-              street: shippingAddress.street,
-              city: shippingAddress.city,
-              state: shippingAddress.state,
-              zip_code: shippingAddress.zipCode,
-              country: shippingAddress.country,
-          },
-        });
+      await accountApi('addresses', {
+        method: 'PUT',
+        body: {
+          street: shippingAddress.street,
+          city: shippingAddress.city,
+          state: shippingAddress.state,
+          zip_code: shippingAddress.zipCode,
+          country: shippingAddress.country,
+        },
+      });
 
       toast.success('Address updated successfully!');
       console.log('✅ Address updated');
@@ -239,6 +277,66 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
     } catch (error) {
       console.error('❌ Error updating notification preferences:', error);
       toast.error('Failed to update notification preferences');
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    const email = accountInfo.email;
+    if (!email) {
+      toast.error('Your account email is unavailable. Sign out and sign in again.');
+      return;
+    }
+    const result = await authService.resetPassword(email);
+    if (result.success) toast.success('Password reset instructions have been sent to your email.');
+    else toast.error(result.error || 'Could not send password reset instructions.');
+  };
+
+  const handleRevokeSession = async (session: AuthSessionSummary) => {
+    if (session.current) return;
+    try {
+      await authSessionsService.revoke(session.id);
+      setSessions((current) => current.filter((item) => item.id !== session.id));
+      toast.success('Session signed out.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not revoke session.');
+    }
+  };
+
+  const handleBeginMfa = async () => {
+    setMfaBusy(true);
+    try {
+      const result = await accountApi<{ secret: string }>('mfa', { method: 'POST', body: { action: 'begin' } });
+      setMfaSecret(result.secret);
+      setMfaCode('');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not start authenticator setup.');
+    } finally {
+      setMfaBusy(false);
+    }
+  };
+
+  const handleMfaAction = async (action: 'verify' | 'disable') => {
+    setMfaBusy(true);
+    try {
+      const result = await accountApi<{ recoveryCodes?: string[] }>('mfa', { method: 'POST', body: { action, code: mfaCode } });
+      setMfaEnabled(action === 'verify');
+      setRecoveryCodes(result.recoveryCodes || []);
+      setMfaSecret('');
+      setMfaCode('');
+      toast.success(action === 'verify' ? 'Authenticator protection is enabled.' : 'Authenticator protection is disabled.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not verify authenticator code.');
+    } finally {
+      setMfaBusy(false);
+    }
+  };
+
+  const handleManagePaymentMethods = async () => {
+    try {
+      const url = await paymentMethodsService.openPortal();
+      window.location.assign(url);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not open payment settings.');
     }
   };
 
@@ -530,7 +628,7 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
                     <p className="text-sm text-gray-600 mb-4">
                       It's a good idea to use a strong password that you're not using elsewhere
                     </p>
-                    <Button variant="outline">Update Password</Button>
+                    <Button type="button" variant="outline" onClick={handlePasswordReset}>Send Password Reset Link</Button>
                   </div>
 
                   <div className="border-b pb-4">
@@ -538,7 +636,27 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
                     <p className="text-sm text-gray-600 mb-4">
                       Add an extra layer of security to your account
                     </p>
-                    <Button variant="outline">Enable 2FA</Button>
+                    {mfaEnabled ? (
+                      <div className="space-y-3">
+                        <p className="text-sm text-green-700">Authenticator protection is enabled for new sign-ins.</p>
+                        {recoveryCodes.length > 0 && <div className="rounded bg-amber-50 p-4 text-sm"><p className="mb-2 font-medium">Save these one-time recovery codes now. They will not be shown again.</p><div className="grid grid-cols-2 gap-2 font-mono">{recoveryCodes.map((code) => <code key={code}>{code}</code>)}</div></div>}
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Input aria-label="Current authenticator code" autoComplete="one-time-code" inputMode="text" maxLength={10} placeholder="Authenticator code to disable" value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ''))} />
+                          <Button type="button" variant="outline" disabled={mfaBusy || mfaCode.length !== 6} onClick={() => handleMfaAction('disable')}>Disable 2FA</Button>
+                        </div>
+                      </div>
+                    ) : mfaSecret ? (
+                      <div className="space-y-3 rounded bg-gray-50 p-4">
+                        <p className="text-sm">Add this key in your authenticator app, then enter the six-digit code it generates.</p>
+                        <code className="block break-all rounded bg-white p-3 text-sm select-all">{mfaSecret}</code>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Input aria-label="Authenticator verification code" autoComplete="one-time-code" inputMode="numeric" maxLength={6} placeholder="6-digit code" value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ''))} />
+                          <Button type="button" disabled={mfaBusy || mfaCode.length !== 6} onClick={() => handleMfaAction('verify')}>Verify and enable</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button type="button" variant="outline" disabled={mfaBusy} onClick={handleBeginMfa}>{mfaBusy ? 'Preparing…' : 'Set up authenticator app'}</Button>
+                    )}
                   </div>
 
                   <div className="border-b pb-4">
@@ -546,15 +664,18 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
                     <p className="text-sm text-gray-600 mb-4">
                       Manage your saved payment methods
                     </p>
-                    <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg mb-3">
-                      <CreditCard className="h-6 w-6 text-gray-400" />
-                      <div className="flex-1">
-                        <p className="text-sm">Visa ending in 4242</p>
-                        <p className="text-xs text-gray-500">Expires 12/2026</p>
+                    {paymentMethodsLoading ? <p className="text-sm text-gray-600">Loading saved cards…</p> : savedPaymentMethods.length ? (
+                      <div className="mb-4 space-y-2">
+                        {savedPaymentMethods.map((method) => (
+                          <div key={method.id} className="flex items-center gap-3 rounded-lg bg-gray-50 p-3">
+                            <CreditCard className="h-5 w-5 text-gray-500" />
+                            <div className="flex-1 text-sm"><span className="capitalize">{method.brand}</span> ending in {method.last4}<p className="text-xs text-gray-500">Expires {method.expMonth}/{method.expYear}</p></div>
+                            {method.isDefault && <span className="text-xs text-green-700">Default</span>}
+                          </div>
+                        ))}
                       </div>
-                      <Button variant="ghost" size="sm">Remove</Button>
-                    </div>
-                    <Button variant="outline">Add Payment Method</Button>
+                    ) : <p className="mb-4 text-sm text-gray-600">No saved cards yet. Card details stay with Stripe, not this app.</p>}
+                    <Button type="button" variant="outline" onClick={handleManagePaymentMethods}>Manage payment methods</Button>
                   </div>
 
                   <div>
@@ -562,15 +683,29 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
                     <p className="text-sm text-gray-600 mb-4">
                       Manage devices where you're currently signed in
                     </p>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div>
-                          <p className="text-sm text-gray-900">Chrome on Windows</p>
-                          <p className="text-xs text-gray-500">New York, USA • Active now</p>
-                        </div>
-                        <span className="text-xs text-green-600">Current</span>
+                    {sessionsLoading ? <p className="text-sm text-gray-600">Loading active sessions…</p> : sessions.length === 0 ? (
+                      <p className="text-sm text-gray-600">No active sessions were returned by Neon Auth.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {sessions.map((session) => (
+                          <div key={session.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg">
+                            <div className="min-w-0">
+                              <p className="text-sm text-gray-900 break-all">{session.userAgent || 'Browser session'}</p>
+                              <p className="text-xs text-gray-500">
+                                {session.current ? 'This device' : 'Other device'}
+                                {session.ipAddress ? ` · ${session.ipAddress}` : ''}
+                                {' · Signed in '}{new Date(session.createdAt).toLocaleString()}
+                              </p>
+                            </div>
+                            {session.current ? <span className="text-xs text-green-700">Current session</span> : (
+                              <Button type="button" variant="outline" size="sm" onClick={() => handleRevokeSession(session)}>
+                                Sign out
+                              </Button>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               </Card>

@@ -14,71 +14,13 @@ export function ResetPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    // Check if we have a valid session for password reset
-    const checkSession = async () => {
-      if (!config.useSupabase && !config.useNeonAuth) return;
-
-      if (config.useNeonAuth) {
-        const resetToken = new URLSearchParams(window.location.search).get('token');
-        if (!resetToken) {
-          toast.error('Invalid or expired password reset link. Please request a new one.');
-          window.location.href = '/';
-        }
-        return;
-      }
-
-      // Check if we have hash fragments from the email link
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const accessToken = hashParams.get('access_token');
-      const type = hashParams.get('type');
-      const error = hashParams.get('error');
-      const errorDescription = hashParams.get('error_description');
-
-      // Handle errors from the link (e.g. expired, invalid)
-      if (error) {
-        console.error('Password reset link error:', error, errorDescription);
-        toast.error(errorDescription?.replace(/\+/g, ' ') || 'Invalid or expired reset link');
-        return;
-      }
-
-      // If we have a password recovery token in the URL, exchange it for a session
-      if (accessToken && type === 'recovery') {
-        try {
-          const { supabase } = await import('../utils/supabaseClient');
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: hashParams.get('refresh_token') || '',
-          });
-
-          if (sessionError) {
-            console.error('Session error:', sessionError);
-            toast.error('Invalid or expired reset link. Please request a new password reset.');
-            setTimeout(() => {
-              window.location.href = '/';
-            }, 2000);
-            return;
-          }
-
-          // Clear the hash from URL
-          window.history.replaceState(null, '', window.location.pathname);
-        } catch (error) {
-          console.error('Error setting session:', error);
-          toast.error('Invalid or expired reset link. Please request a new password reset.');
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 2000);
-          return;
-        }
-      }
-
-      // Verify we have a valid user session
-      const user = await authService.getCurrentUser();
-      if (!user) {
+    // Neon Auth reset links carry a token in the query string.
+    const checkSession = () => {
+      if (!config.useNeonAuth) return;
+      const resetToken = new URLSearchParams(window.location.search).get('token');
+      if (!resetToken) {
         toast.error('Invalid or expired reset link. Please request a new password reset.');
-        setTimeout(() => {
-          window.location.href = '/';
-        }, 2000);
-        return;
+        window.location.href = '/';
       }
     };
 
@@ -106,7 +48,7 @@ export function ResetPasswordPage() {
     setIsLoading(true);
 
     try {
-      if (config.useNeonAuth || config.useSupabase) {
+      if (config.useNeonAuth) {
         const resetToken = new URLSearchParams(window.location.search).get('token');
         const result = await authService.updatePassword(password, resetToken);
         

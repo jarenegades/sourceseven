@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { authorizeAdmin } from '../../../src/server/auth.js';
 import { db } from '../../../src/server/db.js';
 import { categories, products } from '../../../src/server/schema.js';
-import { validateProductInput, type ProductValues } from '../products.js';
+import { validateProductInput, type ProductValues } from '../../../src/server/adminApi/products.js';
 import { isForeignKeyViolation, titleCase } from '../../../src/server/bulkProductHelpers.js';
 
 const MAX_BULK_ITEMS = 500;

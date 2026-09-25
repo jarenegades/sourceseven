@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Elements } from '@stripe/react-stripe-js';
@@ -21,6 +20,7 @@ import { ordersService } from '../utils/ordersService';
 import { orderNotificationService } from '../utils/orderNotificationService';
 import { ShippingMethod, shippingMethodsService } from '../utils/shippingMethodsService';
 import { PaymentMethodCode, PaymentMethodSetting, commerceSettingsService } from '../utils/commerceSettingsService';
+import { authenticatedApi } from '../utils/accountApi';
 
 interface CheckoutPageProps {
   cartItems: CartItem[];
@@ -30,10 +30,15 @@ interface CheckoutPageProps {
   selectedCurrency?: Currency;
 }
 
+function createCheckoutAttemptId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function CheckoutPage({ cartItems, onUpdateQuantity, onRemoveItem, onOrderComplete, selectedCurrency = 'USD' }: CheckoutPageProps) {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
-  const [shippingMethod, setShippingMethod] = useState('standard');
+  const [shippingMethod, setShippingMethod] = useState<'standard' | 'express' | 'overnight'>('standard');
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodCode>('card');
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodSetting[]>([]);
@@ -42,6 +47,8 @@ export function CheckoutPage({ cartItems, onUpdateQuantity, onRemoveItem, onOrde
   const [isPreparingPayment, setIsPreparingPayment] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [paymentIntentId, setPaymentIntentId] = useState<string | undefined>(undefined);
+  const [checkoutAttemptId, setCheckoutAttemptId] = useState(createCheckoutAttemptId);
+  const [serverQuote, setServerQuote] = useState<{ currency: string; shippingMethod: string; subtotal: number; tax: number; shippingCost: number; total: number; cartKey: string } | null>(null);
   
   const [shippingInfo, setShippingInfo] = useState({
     fullName: '',
@@ -56,20 +63,25 @@ export function CheckoutPage({ cartItems, onUpdateQuantity, onRemoveItem, onOrde
   // Removed paymentInfo state as Stripe handles this
 
   // Calculate totals in selected currency
-  const subtotal = cartItems.reduce((sum, item) => {
+  const cartKey = JSON.stringify(cartItems.map((item) => [item.product_id, item.quantity, item.product?.price]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+  const localSubtotal = cartItems.reduce((sum, item) => {
     if (!item.product) return sum;
     const itemCurrency = 'USD'; // Assuming products are stored in USD
     const convertedPrice = convertCurrency(item.product.price, itemCurrency, selectedCurrency);
     return sum + convertedPrice * item.quantity;
   }, 0);
-  const tax = subtotal * 0.08;
+  const localTax = localSubtotal * 0.08;
   const selectedShippingMethod = shippingMethods.find((method) => method.code === shippingMethod) || shippingMethods[0];
   const shippingThreshold = selectedShippingMethod?.free_shipping_threshold == null
     ? null
     : convertCurrency(selectedShippingMethod.free_shipping_threshold, 'USD', selectedCurrency);
   const shippingBase = convertCurrency(selectedShippingMethod?.price || 0, 'USD', selectedCurrency);
-  const shippingCost = shippingThreshold !== null && subtotal >= shippingThreshold ? 0 : shippingBase;
-  const total = subtotal + tax + shippingCost;
+  const localShippingCost = shippingThreshold !== null && localSubtotal >= shippingThreshold ? 0 : shippingBase;
+  const hasCurrentQuote = serverQuote?.currency === selectedCurrency && serverQuote.shippingMethod === shippingMethod && serverQuote.cartKey === cartKey;
+  const subtotal = hasCurrentQuote ? serverQuote.subtotal : localSubtotal;
+  const tax = hasCurrentQuote ? serverQuote.tax : localTax;
+  const shippingCost = hasCurrentQuote ? serverQuote.shippingCost : localShippingCost;
+  const total = hasCurrentQuote ? serverQuote.total : subtotal + tax + shippingCost;
 
   useEffect(() => {
     shippingMethodsService.getActive()
@@ -99,13 +111,28 @@ export function CheckoutPage({ cartItems, onUpdateQuantity, onRemoveItem, onOrde
     }
 
     if (paymentMethod !== 'card') {
+      if (import.meta.env.VITE_NEON_AUTH_URL) {
+        setIsPreparingPayment(true);
+        try {
+          const { quote } = await authenticatedApi<{ quote: { currency: string; shippingMethod: string; subtotal: number; tax: number; shippingCost: number; total: number } }>(
+            '/api/checkout/quote',
+            { method: 'POST', body: { currency: selectedCurrency, shippingMethod } },
+          );
+          setServerQuote({ ...quote, cartKey });
+        } catch (error: any) {
+          toast.error(error.message || 'Unable to calculate the checkout total');
+          return;
+        } finally {
+          setIsPreparingPayment(false);
+        }
+      }
       setCurrentStep(3);
       toast.success('Payment method saved');
       return;
     }
 
     if (!isStripeConfigured()) {
-      toast.error('Stripe is not configured. Add your publishable key and Supabase URL, then try again.');
+      toast.error('Stripe is not configured. Check the publishable key and the server-side STRIPE_SECRET_KEY in Vercel.');
       return;
     }
 
@@ -119,9 +146,8 @@ export function CheckoutPage({ cartItems, onUpdateQuantity, onRemoveItem, onOrde
         currency: selectedCurrency.toLowerCase(),
         customerEmail: shippingInfo.email,
         customerName: shippingInfo.fullName,
-        metadata: {
-          shipping_method: shippingMethod,
-        },
+        shippingMethod,
+        checkoutAttemptId,
       });
 
       if (!paymentIntent.success || !paymentIntent.clientSecret) {
@@ -130,6 +156,7 @@ export function CheckoutPage({ cartItems, onUpdateQuantity, onRemoveItem, onOrde
 
       setStripePromise(stripe);
       setClientSecret(paymentIntent.clientSecret);
+      if (paymentIntent.quote) setServerQuote({ ...paymentIntent.quote, cartKey });
       setCurrentStep(2);
       toast.success('Shipping information saved');
     } catch (error: any) {
@@ -179,6 +206,7 @@ export function CheckoutPage({ cartItems, onUpdateQuantity, onRemoveItem, onOrde
           payment_method: paymentMethod === 'cash-on-delivery' ? 'cash-on-delivery' : paymentMethod === 'bank-transfer' ? 'bank-transfer' : 'credit-card',
           payment_status: paymentMethod === 'card' ? 'completed' : 'pending',
           payment_transaction_id: paymentIntentId || null,
+          currency: selectedCurrency,
         },
         cartItems.map((item) => ({
           product_id: item.product_id,
@@ -189,19 +217,25 @@ export function CheckoutPage({ cartItems, onUpdateQuantity, onRemoveItem, onOrde
           total_price: item.product
             ? convertCurrency(item.product.price, 'USD', selectedCurrency) * item.quantity
             : 0,
-        }))
+        })),
+        checkoutAttemptId,
       );
 
-      await cartService.clearCart(user.id);
+      // Neon order placement clears the cart within the same transaction as
+      // order creation. Avoid a second request that could turn a saved order
+      // into a misleading checkout failure if cart cleanup is retried.
+      if (!import.meta.env.VITE_NEON_AUTH_URL) {
+        await cartService.clearCart(user.id);
+      }
 
       try {
         await orderNotificationService.sendOrderCompleteNotifications({
           userId: user.id,
           orderNumber: order.order_number,
-          subtotal,
-          tax,
-          shippingCost,
-          total,
+          subtotal: order.subtotal,
+          tax: order.tax,
+          shippingCost: order.shipping_cost,
+          total: order.total,
           currency: selectedCurrency,
           customer: {
             fullName: shippingInfo.fullName,
@@ -240,6 +274,12 @@ export function CheckoutPage({ cartItems, onUpdateQuantity, onRemoveItem, onOrde
     } catch (error: any) {
       console.error('Order placement failed:', error);
       toast.error(error.message || 'Failed to place order');
+      if (/(requested a refund|automatically refunded|already refunded)/i.test(error?.message || '')) {
+        setCheckoutAttemptId(createCheckoutAttemptId());
+        setPaymentIntentId(undefined);
+        setClientSecret('');
+        setCurrentStep(1);
+      }
     } finally {
       setIsPlacingOrder(false);
     }
@@ -434,7 +474,7 @@ export function CheckoutPage({ cartItems, onUpdateQuantity, onRemoveItem, onOrde
               ) : !clientSecret || !stripePromise ? (
                 <div className="space-y-4">
                   <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
-                    Unable to initialize Stripe payment. Go back and try again after deploying the payment function and setting the Stripe secret in Supabase.
+                    Unable to initialize Stripe payment. Go back and try again after configuring the Neon checkout environment.
                   </div>
                   <Button
                     onClick={() => setCurrentStep(1)}

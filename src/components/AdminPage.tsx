@@ -14,17 +14,25 @@ import Papa from 'papaparse';
 import { Plus, Edit, Trash2, Package, Tag, TrendingUp, Percent, Search, Filter, Upload, Download, FileUp, CheckCircle2, AlertCircle, XCircle, Link2, Image, Users, CreditCard, Settings, RefreshCw, ChevronLeft, ChevronRight, DollarSign, Bell, Layers3, Truck } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from './ui/dialog';
 import { Alert, AlertDescription } from './ui/alert';
-import { SupabaseStatus } from './SupabaseStatus';
 import { DataManagementPanel } from './DataManagementPanel';
 import { UserManagementPanel } from './UserManagementPanel';
 import { AdminOrdersPanel } from './AdminOrdersPanel';
-import { supabase } from '../utils/supabaseClient';
-import { supabaseAdmin } from '../utils/supabaseAdminClient';
 import { productsService } from '../utils/productsService';
 import { paymentGatewayService, PaymentGatewaySettings } from '../utils/paymentGatewayService';
 import { currencyRatesService, CurrencyRate } from '../utils/currencyRatesService';
 import { Switch } from './ui/switch';
-import { publicAnonKey, supabaseUrl } from '../utils/supabase/info';
+import { uploadImage } from '../utils/storage';
+
+const neonStorageCompat = {
+  from: (_bucket: string) => ({
+    upload: async (path: string, blob: Blob) => ({ data: { path: await uploadImage(new File([blob], path, { type: blob.type })) }, error: null }),
+    getPublicUrl: (path: string) => ({ data: { publicUrl: path } }),
+  }),
+};
+const neonStorage = { storage: neonStorageCompat };
+const storageAdmin = null;
+const storageProxyUrl = '';
+const storageProxyKey = '';
 import { categoriesService, StoreCategory } from '../utils/categoriesService';
 import { canonicalProductCategory } from '../utils/categoryIds';
 import { CategoryManagementPanel } from './CategoryManagementPanel';
@@ -313,11 +321,11 @@ export function AdminPage({
     return acc;
   }, {});
 
-  // Helper: upload image to Supabase storage with unique filename
+  // Helper: upload image to Neon Object Storage with a unique filename
   const uploadImageToStorage = async (imageUrl: string, productName: string, index?: number): Promise<string> => {
     try {
       if (!imageUrl) return imageUrl;
-      if (imageUrl.includes('supabase.co')) return imageUrl;
+      if (imageUrl.includes('product-images')) return imageUrl;
 
       // Generate unique filename with timestamp and index if provided
       const timestamp = Date.now();
@@ -340,7 +348,7 @@ export function AdminPage({
         const res = await fetch(imageUrl);
         const blob = await res.blob();
         // Use admin client to bypass RLS policies
-        const storageClient = supabaseAdmin || supabase;
+        const storageClient = storageAdmin || neonStorage;
         const { error } = await storageClient.storage.from('product-images').upload(fileName, blob, { upsert: true });
         if (error) throw error;
         const { data } = storageClient.storage.from('product-images').getPublicUrl(fileName);
@@ -360,7 +368,8 @@ export function AdminPage({
 
         try {
           // Try using Edge Function first to bypass CORS
-          const edgeFunctionUrl = `${supabaseUrl}/functions/v1/download-image`;
+          const edgeFunctionUrl = '';
+          throw new Error('Remote image proxy is not configured; using direct download');
 
           try {
             console.log(`📥 Attempting to download image via Edge Function for ${productName}: ${imageUrl.substring(0, 80)}...`);
@@ -374,8 +383,8 @@ export function AdminPage({
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'apikey': publicAnonKey,
-                'Authorization': `Bearer ${publicAnonKey}`,
+                'apikey': storageProxyKey,
+                'Authorization': `Bearer ${storageProxyKey}`,
               },
               body: JSON.stringify({ imageUrl }),
             });
@@ -405,8 +414,8 @@ export function AdminPage({
 
                   console.log(`📤 Uploading blob to storage for ${productName} (size: ${blob.size} bytes, type: ${blob.type})`);
 
-                  // Upload to Supabase Storage using admin client to bypass RLS
-                  const storageClient = supabaseAdmin || supabase;
+                  // Upload through the Neon Object Storage adapter
+                  const storageClient = storageAdmin || neonStorage;
                   const { error, data: uploadData } = await storageClient.storage.from('product-images').upload(fileName, blob, { upsert: true });
                   if (error) {
                     console.error(`❌ Storage upload error for ${productName}:`, error);
@@ -450,7 +459,7 @@ export function AdminPage({
             if (!res.ok) throw new Error(`Failed to fetch image: ${res.status} ${res.statusText}`);
             const blob = await res.blob();
             // Use admin client to bypass RLS policies
-            const storageClient = supabaseAdmin || supabase;
+            const storageClient = storageAdmin || neonStorage;
             const { error } = await storageClient.storage.from('product-images').upload(fileName, blob, { upsert: true });
             if (error) throw error;
             const { data } = storageClient.storage.from('product-images').getPublicUrl(fileName);
@@ -1044,8 +1053,8 @@ export function AdminPage({
         const imageUploadPromises = batch.map(async ({ product, index }) => {
           if (product.image && product.image.trim()) {
             try {
-              // Skip if already in Supabase storage
-              if (product.image.includes('supabase.co')) {
+              // Skip if already in Object Storage
+              if (product.image.includes('product-images')) {
                 return product;
               }
 
@@ -1145,13 +1154,13 @@ export function AdminPage({
     }, 500);
   };
 
-  // Migrate existing product images from Dropbox URLs to Supabase Storage
+  // Migrate existing product images from Dropbox URLs to Neon Object Storage
   const handleMigrateImages = async () => {
     // Find products with Dropbox URLs
     const productsWithDropboxUrls = products.filter(p =>
       p.image &&
       p.image.includes('dropbox.com') &&
-      !p.image.includes('supabase.co')
+      !p.image.includes('product-images')
     );
 
     if (productsWithDropboxUrls.length === 0) {
@@ -1160,8 +1169,8 @@ export function AdminPage({
     }
 
     const confirmed = window.confirm(
-      `Migrate ${productsWithDropboxUrls.length} product images from Dropbox to Supabase Storage?\n\n` +
-      `This will download each image and upload it to Supabase Storage, then update the product records.\n\n` +
+      `Migrate ${productsWithDropboxUrls.length} product images from Dropbox to Neon Object Storage?\n\n` +
+      `This will download each image and upload it to Neon Object Storage, then update the product records.\n\n` +
       `Continue?`
     );
 
@@ -1186,7 +1195,7 @@ export function AdminPage({
         const migrationPromises = batch.map(async (product) => {
           try {
             const newImageUrl = await uploadImageToStorage(product.image, product.name);
-            if (newImageUrl !== product.image && newImageUrl.includes('supabase.co')) {
+            if (newImageUrl !== product.image && newImageUrl.includes('product-images')) {
               // Update product with new image URL
               await onUpdateProduct(product.id, { image: newImageUrl });
               migratedCount++;
@@ -1327,7 +1336,6 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,,`;
               <h1 className="text-[#003366] mb-2">Admin Dashboard</h1>
               <p className="text-gray-600">Manage products, sales, and categories</p>
             </div>
-            <SupabaseStatus />
           </div>
         </div>
 
@@ -1336,14 +1344,14 @@ Product Name Only Example - All Other Fields Optional!,,,,,,,,,,,,,`;
           <DataManagementPanel />
 
           {/* Image Migration Button */}
-          {products.some(p => p.image && p.image.includes('dropbox.com') && !p.image.includes('supabase.co')) && (
+          {products.some(p => p.image && p.image.includes('dropbox.com') && !p.image.includes('product-images')) && (
             <Card className="mt-4">
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold text-lg">Image Migration</h3>
                     <p className="text-sm text-gray-600 mt-1">
-                      {products.filter(p => p.image && p.image.includes('dropbox.com') && !p.image.includes('supabase.co')).length} products have Dropbox URLs that need to be migrated to Supabase Storage
+                      {products.filter(p => p.image && p.image.includes('dropbox.com') && !p.image.includes('product-images')).length} products have Dropbox URLs that need to be migrated to Neon Object Storage
                     </p>
                   </div>
                   <Button

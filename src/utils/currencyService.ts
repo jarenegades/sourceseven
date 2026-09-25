@@ -115,7 +115,7 @@ export function setRateSourcePreference(preference: RateSourcePreference): void 
 
 /**
  * Update exchange rates from a real-time API or database
- * Uses Supabase database first (admin-maintained rates), then exchangerate-api.com
+ * Uses admin-maintained rates first, then exchangerate-api.com
  * Falls back to static rates if both fail
  */
 let exchangeRatesCache = { ...EXCHANGE_RATES };
@@ -133,7 +133,7 @@ export async function updateExchangeRates(): Promise<void> {
       return;
     }
 
-    // Try to fetch from Supabase database first (admin-maintained rates)
+    // Try to fetch admin-maintained rates first.
     try {
       const dbRates = await currencyRatesService.getRates();
       if (dbRates && dbRates.JMD && dbRates.CAD) {
@@ -144,7 +144,7 @@ export async function updateExchangeRates(): Promise<void> {
           console.log('✅ Exchange rates updated from database:', {
             JMD: EXCHANGE_RATES.JMD,
             CAD: EXCHANGE_RATES.CAD,
-            source: 'supabase'
+            source: 'database'
           });
         }
         return;
@@ -170,22 +170,10 @@ export async function updateExchangeRates(): Promise<void> {
         if (data.rates && typeof data.rates.JMD === 'number' && data.rates.JMD > 0) {
           exchangeRatesCache.JMD = data.rates.JMD;
           EXCHANGE_RATES.JMD = data.rates.JMD;
-          // Store API rates in database for future use
-          try {
-            await currencyRatesService.updateRate('JMD', data.rates.JMD, 'api');
-          } catch (e) {
-            // Silently fail - not critical
-          }
         }
         if (data.rates && typeof data.rates.CAD === 'number' && data.rates.CAD > 0) {
           exchangeRatesCache.CAD = data.rates.CAD;
           EXCHANGE_RATES.CAD = data.rates.CAD;
-          // Store API rates in database for future use
-          try {
-            await currencyRatesService.updateRate('CAD', data.rates.CAD, 'api');
-          } catch (e) {
-            // Silently fail - not critical
-          }
         }
         
         lastFetchTime = now;

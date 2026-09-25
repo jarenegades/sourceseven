@@ -151,12 +151,18 @@ export function AboutPage() {
 
           <div className="bg-white p-4 md:p-6 grid sm:grid-cols-3 gap-3">
             {[
-              ['1. Order or Request', 'Buy from our catalog, or tell us what you need sourced and we\'ll find it.'],
-              ['2. We Source & Ship', 'We purchase, consolidate and ship your order from the supplier.'],
-              ['3. Delivered in Jamaica', 'Your package clears and is delivered or ready for pickup in Kingston.'],
-            ].map(([name, detail]) => (
-              <div key={name} className="min-h-32 rounded-lg border border-gray-200 p-5 flex flex-col justify-between">
-                <h3 className="text-[#003366] text-lg font-semibold">{name}</h3>
+              ['#DC143C', 'Order or Request', 'Buy from our catalog, or tell us what you need sourced and we\'ll find it.'],
+              ['#003366', 'We Source & Ship', 'We purchase, consolidate and ship your order from the supplier.'],
+              ['#FF9900', 'Delivered in Jamaica', 'Your package clears and is delivered or ready for pickup in Kingston.'],
+            ].map(([color, name, detail], index) => (
+              <div key={name} className="min-h-32 rounded-lg border border-gray-200 p-5 flex flex-col">
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center mb-3 text-white font-semibold shrink-0"
+                  style={{ backgroundColor: color }}
+                >
+                  {index + 1}
+                </div>
+                <h3 className="text-[#003366] text-lg font-semibold mb-1">{name}</h3>
                 <p className="text-sm text-gray-600 leading-snug">{detail}</p>
               </div>
             ))}

@@ -1,4 +1,4 @@
-import { Mail, Phone, MapPin, Clock, MessageSquare, HeadphonesIcon } from 'lucide-react';
+import { Mail, Phone, MapPin, Clock, HeadphonesIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -42,7 +42,7 @@ export function ContactPage() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6 mb-8">
+      <div className="grid md:grid-cols-2 gap-6 mb-8">
         {/* Quick Contact Cards */}
         <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-[#003366] hover:shadow-md transition-shadow">
           <div className="bg-blue-50 w-12 h-12 rounded-full flex items-center justify-center mb-4">
@@ -70,23 +70,6 @@ export function ContactPage() {
           </a>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm p-6 border-l-4 border-[#003366] hover:shadow-md transition-shadow">
-          <div className="bg-blue-50 w-12 h-12 rounded-full flex items-center justify-center mb-4">
-            <MessageSquare className="h-6 w-6 text-[#003366]" />
-          </div>
-          <h3 className="text-[#003366] mb-2">Follow Us</h3>
-          <p className="text-gray-600 text-sm mb-3">
-            Follow Source Sevens on Instagram
-          </p>
-          <a
-            href="https://www.instagram.com/jarenegades/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#003366] hover:underline font-semibold"
-          >
-            @jarenegades →
-          </a>
-        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-8 mb-8">

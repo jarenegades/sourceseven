@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useState, useEffect } from 'react';
 import { ordersService, OrderWithItems } from '../utils/ordersService';
 import { authService } from '../utils/authService';
-import { config } from '../utils/config';
+import { formatCurrency } from '../utils/currencyService';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,7 @@ interface Order {
   date: string;
   status: 'delivered' | 'in-transit' | 'processing' | 'cancelled' | 'confirmed' | 'refunded';
   total: number;
+  currency: 'USD' | 'JMD' | 'CAD';
   subtotal: number;
   tax: number;
   shippingCost: number;
@@ -65,12 +66,6 @@ export function OrdersPage({ onProductClick }: OrdersPageProps) {
       setError(null);
 
       // Get current user
-      if (!config.useSupabase) {
-        setError('Supabase is not enabled');
-        setOrders([]);
-        return;
-      }
-
       const user = await authService.getCurrentUser();
       if (!user?.id) {
         setError('User not authenticated');
@@ -80,13 +75,13 @@ export function OrdersPage({ onProductClick }: OrdersPageProps) {
 
       console.log('📦 Loading orders for user:', user.id);
 
-      // Fetch orders from Supabase
-      const supabaseOrders = await ordersService.getAllByUser(user.id);
+      // Fetch orders from the Neon account API
+      const neonOrders = await ordersService.getAllByUser(user.id);
 
-      console.log(`✅ Loaded ${supabaseOrders.length} orders from database`);
+      console.log(`✅ Loaded ${neonOrders.length} orders from database`);
 
-      // Map Supabase orders to component format
-      const mappedOrders: Order[] = supabaseOrders.map((order: OrderWithItems) => ({
+      // Map Neon orders to component format
+      const mappedOrders: Order[] = neonOrders.map((order: OrderWithItems) => ({
         id: order.id,
         orderNumber: order.order_number,
         date: new Date(order.created_at).toLocaleDateString('en-US', {
@@ -96,6 +91,7 @@ export function OrdersPage({ onProductClick }: OrdersPageProps) {
         }),
         status: order.status === 'confirmed' ? 'processing' : order.status as Order['status'],
         total: order.total,
+        currency: order.currency || 'USD',
         subtotal: order.subtotal,
         tax: order.tax,
         shippingCost: order.shipping_cost,
@@ -232,8 +228,8 @@ export function OrdersPage({ onProductClick }: OrdersPageProps) {
                   <tr>
                     <td>${item.name}</td>
                     <td>${item.quantity}</td>
-                    <td>$${item.price.toFixed(2)}</td>
-                    <td>$${(item.price * item.quantity).toFixed(2)}</td>
+                    <td>${formatCurrency(item.price, order.currency)}</td>
+                    <td>${formatCurrency(item.price * item.quantity, order.currency)}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -241,10 +237,10 @@ export function OrdersPage({ onProductClick }: OrdersPageProps) {
           </div>
 
           <div class="section">
-            <div class="row"><strong>Subtotal</strong><span>$${order.subtotal.toFixed(2)}</span></div>
-            <div class="row"><strong>Tax</strong><span>$${order.tax.toFixed(2)}</span></div>
-            <div class="row"><strong>Shipping</strong><span>$${order.shippingCost.toFixed(2)}</span></div>
-            <div class="row"><strong>Total</strong><span>$${order.total.toFixed(2)}</span></div>
+            <div class="row"><strong>Subtotal</strong><span>${formatCurrency(order.subtotal, order.currency)}</span></div>
+            <div class="row"><strong>Tax</strong><span>${formatCurrency(order.tax, order.currency)}</span></div>
+            <div class="row"><strong>Shipping</strong><span>${formatCurrency(order.shippingCost, order.currency)}</span></div>
+            <div class="row"><strong>Total</strong><span>${formatCurrency(order.total, order.currency)}</span></div>
           </div>
         </body>
       </html>
@@ -306,7 +302,7 @@ export function OrdersPage({ onProductClick }: OrdersPageProps) {
               </div>
               <div className="text-left md:text-right">
                 <p className="text-sm text-gray-600">Total</p>
-                <p className="text-2xl text-[#DC143C]">${order.total.toFixed(2)}</p>
+                <p className="text-2xl text-[#DC143C]">{formatCurrency(order.total, order.currency)}</p>
               </div>
             </div>
 
@@ -331,11 +327,11 @@ export function OrdersPage({ onProductClick }: OrdersPageProps) {
                       {item.name}
                     </h4>
                     <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
-                    <p className="text-sm text-gray-600">${item.price.toFixed(2)} each</p>
+                    <p className="text-sm text-gray-600">{formatCurrency(item.price, order.currency)} each</p>
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-gray-900">
-                      ${(item.price * item.quantity).toFixed(2)}
+                      {formatCurrency(item.price * item.quantity, order.currency)}
                     </p>
                   </div>
                 </div>
@@ -454,8 +450,8 @@ export function OrdersPage({ onProductClick }: OrdersPageProps) {
                             <p className="text-gray-600">Qty: {item.quantity}</p>
                           </div>
                           <div className="text-right">
-                            <p>${item.price.toFixed(2)} each</p>
-                            <p className="font-semibold">${(item.price * item.quantity).toFixed(2)}</p>
+                            <p>{formatCurrency(item.price, selectedOrder.currency)} each</p>
+                            <p className="font-semibold">{formatCurrency(item.price * item.quantity, selectedOrder.currency)}</p>
                           </div>
                         </div>
                       ))}
@@ -464,10 +460,10 @@ export function OrdersPage({ onProductClick }: OrdersPageProps) {
                     <div className="rounded-lg bg-gray-50 p-4 space-y-2 text-sm">
                       <div className="flex justify-between"><span>Status</span><span>{selectedOrder.status}</span></div>
                       <div className="flex justify-between"><span>Payment</span><span>{selectedOrder.paymentStatus}</span></div>
-                      <div className="flex justify-between"><span>Subtotal</span><span>${selectedOrder.subtotal.toFixed(2)}</span></div>
-                      <div className="flex justify-between"><span>Tax</span><span>${selectedOrder.tax.toFixed(2)}</span></div>
-                      <div className="flex justify-between"><span>Shipping</span><span>${selectedOrder.shippingCost.toFixed(2)}</span></div>
-                      <div className="flex justify-between font-semibold"><span>Total</span><span>${selectedOrder.total.toFixed(2)}</span></div>
+                      <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(selectedOrder.subtotal, selectedOrder.currency)}</span></div>
+                      <div className="flex justify-between"><span>Tax</span><span>{formatCurrency(selectedOrder.tax, selectedOrder.currency)}</span></div>
+                      <div className="flex justify-between"><span>Shipping</span><span>{formatCurrency(selectedOrder.shippingCost, selectedOrder.currency)}</span></div>
+                      <div className="flex justify-between font-semibold"><span>Total</span><span>{formatCurrency(selectedOrder.total, selectedOrder.currency)}</span></div>
                     </div>
 
                     <div className="flex justify-end">

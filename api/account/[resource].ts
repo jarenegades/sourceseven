@@ -23,14 +23,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (auth.authorized === false) return sendError(res, auth.status, auth.message);
 
   try {
-    // Neon Auth IDs are intentionally mapped to the app's UUID profile key here.
-    // In the temporary Supabase-auth fallback, the auth ID is the profile UUID.
-    const profileResult = process.env.NEON_AUTH_BASE_URL
-      ? await pool.query<{ id: string }>(
-          'SELECT id FROM public.user_profiles WHERE neon_auth_user_id = $1 LIMIT 1',
-          [auth.userId],
-        )
-      : { rows: [{ id: auth.userId }] };
+    // Neon Auth IDs are mapped to the app's UUID profile key here.
+    const profileResult = await pool.query<{ id: string }>(
+      'SELECT id FROM public.user_profiles WHERE neon_auth_user_id = $1 LIMIT 1',
+      [auth.userId],
+    );
     const profileId = profileResult.rows[0]?.id;
     if (!profileId) return sendError(res, 409, 'Account profile is still being created. Please try again shortly.');
 

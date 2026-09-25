@@ -1,9 +1,6 @@
-import { supabase } from './supabaseClient';
-import { publicAnonKey, supabaseUrl } from './supabase/info';
+import { getNeonAuthHeaders } from './neonAuthClient';
 
-const SUPABASE_URL = supabaseUrl;
-const ADMIN_ORDERS_URL = `${SUPABASE_URL}/functions/v1/admin-orders`;
-const PROCESS_REFUND_URL = `${SUPABASE_URL}/functions/v1/process-refund`;
+const ADMIN_ORDERS_URL = '/api/admin/orders';
 
 export interface AdminOrderRecord {
   id: string;
@@ -38,35 +35,30 @@ export interface AdminOrderRecord {
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession();
-  const accessToken = data.session?.access_token;
+  const headers = await getNeonAuthHeaders();
+  if (!headers.Authorization) throw new Error('Admin session not found');
+  return { ...headers, 'Content-Type': 'application/json' };
+}
 
-  if (!accessToken) {
-    throw new Error('Admin session not found');
-  }
-
-  return {
-    'Content-Type': 'application/json',
-    'apikey': publicAnonKey,
-    'Authorization': `Bearer ${accessToken}`,
-  };
+async function readResponse(response: Response, fallback: string) {
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || fallback);
+  return data;
 }
 
 export const adminOrdersService = {
   async getAll(): Promise<AdminOrderRecord[]> {
     const headers = await getAuthHeaders();
-    const response = await fetch(ADMIN_ORDERS_URL, {
-      method: 'GET',
-      headers,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || 'Failed to load admin orders');
+    const orders: AdminOrderRecord[] = [];
+    for (let page = 1; page <= 1000; page++) {
+      const response = await fetch(`${ADMIN_ORDERS_URL}?page=${page}&limit=100`, {
+        method: 'GET', headers, cache: 'no-store',
+      });
+      const data = await readResponse(response, 'Failed to load admin orders');
+      orders.push(...(data.orders || []));
+      if (orders.length >= data.count || data.orders.length < 100) return orders;
     }
-
-    const data = await response.json();
-    return data.orders || [];
+    throw new Error('Too many orders to load');
   },
 
   async updateOrder(orderId: string, updates: {
@@ -80,30 +72,18 @@ export const adminOrdersService = {
       headers,
       body: JSON.stringify({ action: 'update-order', orderId, ...updates }),
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || 'Failed to update order');
-    }
-
-    const data = await response.json();
+    const data = await readResponse(response, 'Failed to update order');
     return data.order;
   },
 
   async processRefund(orderId: string): Promise<AdminOrderRecord> {
     const headers = await getAuthHeaders();
-    const response = await fetch(PROCESS_REFUND_URL, {
+    const response = await fetch(ADMIN_ORDERS_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ orderId }),
+      body: JSON.stringify({ action: 'refund', orderId }),
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || 'Failed to process refund');
-    }
-
-    const data = await response.json();
+    const data = await readResponse(response, 'Failed to process refund');
     return data.order;
   },
 };

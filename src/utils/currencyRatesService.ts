@@ -1,9 +1,5 @@
-/**
- * Currency Rates Service - Manages exchange rates in Supabase database
- */
-
-import { supabase } from './supabaseClient';
-import { Currency } from './currencyService';
+import { authenticatedApi } from './accountApi';
+import type { Currency } from './currencyService';
 
 export interface CurrencyRate {
   id: string;
@@ -14,143 +10,63 @@ export interface CurrencyRate {
   updated_by_user_id?: string;
 }
 
+async function getRateResponse<T>(query = ''): Promise<T> {
+  const response = await fetch(`/api/currency-rates${query}`, { cache: 'no-store' });
+  if (!response.ok) {
+    const result = await response.json().catch(() => null);
+    throw new Error(result?.error || `Could not load currency rates (${response.status})`);
+  }
+  return response.json() as Promise<T>;
+}
+
 export const currencyRatesService = {
-  /**
-   * Get all exchange rates from database
-   */
   async getRates(): Promise<Record<Currency, number>> {
     try {
-      const { data, error } = await supabase
-        .from('currency_rates')
-        .select('currency, rate')
-        .in('currency', ['JMD', 'CAD']);
-
-      if (error) throw error;
-
-      const rates: Record<string, number> = {
-        USD: 1.0, // Base currency
-      };
-
-      if (data) {
-        data.forEach((row: any) => {
-          rates[row.currency] = row.rate;
-        });
-      }
-
-      return rates as Record<Currency, number>;
+      const { rates } = await getRateResponse<{ rates: Record<Currency, number> }>();
+      return rates;
     } catch (error) {
       console.error('Error fetching currency rates:', error);
-      // Return null to trigger fallback to API/cache
+      // The currency service falls back to its external API and cached rates.
       return null as any;
     }
   },
 
-  /**
-   * Get a single currency rate
-   */
   async getRate(currency: Currency): Promise<number | null> {
-    if (currency === 'USD') return 1.0;
-
+    if (currency === 'USD') return 1;
     try {
-      const { data, error } = await supabase
-        .from('currency_rates')
-        .select('rate')
-        .eq('currency', currency)
-        .single();
-
-      if (error) {
-        console.error(`Error fetching ${currency} rate:`, error);
-        return null;
-      }
-
-      return data?.rate || null;
+      const { rate } = await getRateResponse<{ rate: number }>(`?currency=${encodeURIComponent(currency)}`);
+      return rate;
     } catch (error) {
-      console.error('Error fetching currency rate:', error);
+      console.error(`Error fetching ${currency} rate:`, error);
       return null;
     }
   },
 
-  /**
-   * Update a currency rate (admin only)
-   */
-  async updateRate(currency: Currency, rate: number, source: 'api' | 'manual' = 'manual'): Promise<CurrencyRate | null> {
-    if (currency === 'USD') {
-      throw new Error('Cannot update USD rate (base currency)');
-    }
-
-    if (rate <= 0) {
-      throw new Error('Rate must be greater than 0');
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('currency_rates')
-        .update({
-          rate,
-          source,
-          updated_at: new Date().toISOString(),
-          updated_by_user_id: (await supabase.auth.getUser()).data.user?.id,
-        })
-        .eq('currency', currency)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      console.log(`✅ Updated ${currency} rate to ${rate}`);
-      return data;
-    } catch (error) {
-      console.error(`Error updating ${currency} rate:`, error);
-      throw error;
-    }
+  async updateRate(currency: Currency, rate: number, source: 'api' | 'manual' = 'manual'): Promise<CurrencyRate> {
+    if (currency === 'USD') throw new Error('Cannot update USD rate (base currency)');
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Rate must be greater than 0');
+    const result = await authenticatedApi<{ rate: CurrencyRate }>('/api/currency-rates', {
+      method: 'PATCH',
+      body: { currency, rate, source },
+    });
+    return result.rate;
   },
 
-  /**
-   * Batch update multiple rates
-   */
   async updateRates(rates: Record<Currency, number>, source: 'api' | 'manual' = 'manual'): Promise<CurrencyRate[]> {
-    const updates = [];
-
-    for (const [currency, rate] of Object.entries(rates)) {
-      if (currency !== 'USD' && rate > 0) {
-        updates.push(
-          this.updateRate(currency as Currency, rate, source)
-        );
-      }
-    }
-
-    return Promise.all(updates);
+    return Promise.all((['JMD', 'CAD'] as const)
+      .filter((currency) => Number.isFinite(rates[currency]) && rates[currency] > 0)
+      .map((currency) => this.updateRate(currency, rates[currency], source)));
   },
 
-  /**
-   * Get all rates with metadata (for admin viewing)
-   */
   async getAllRatesWithMetadata(): Promise<CurrencyRate[]> {
-    try {
-      const { data, error } = await supabase
-        .from('currency_rates')
-        .select('*')
-        .order('currency', { ascending: true });
-
-      if (error) throw error;
-
-      return data || [];
-    } catch (error) {
-      console.error('Error fetching rates with metadata:', error);
-      throw error;
-    }
+    const { rates } = await getRateResponse<{ rates: CurrencyRate[] }>('?metadata=1');
+    return rates;
   },
 
-  /**
-   * Check if database has currency rates (for migration/setup)
-   */
   async hasCurrencyRatesTable(): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('currency_rates')
-        .select('count', { count: 'exact', head: true });
-
-      return !error;
+      await getRateResponse('?metadata=1');
+      return true;
     } catch {
       return false;
     }

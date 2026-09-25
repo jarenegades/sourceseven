@@ -80,6 +80,7 @@
             "build": "vite build",
             "test:product-categories": "node --experimental-test-isolation=none --experimental-strip-types --test tests/productCategoryHierarchy.test.ts",
             "test:bulk-product-helpers": "node --experimental-test-isolation=none --experimental-strip-types --test tests/bulkProductHelpers.test.ts",
+            "test:checkout-settings": "node --experimental-test-isolation=none --experimental-strip-types --test tests/checkoutSettings.test.ts",
             "upload-images": "ts-node scripts/uploadAndLinkProductImages.ts"
       }
 }

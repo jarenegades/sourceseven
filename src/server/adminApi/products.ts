@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { count, desc, eq, inArray } from 'drizzle-orm';
-import { authorizeAdmin } from '../../src/server/auth.js';
-import { db } from '../../src/server/db.js';
-import { mergeProductCategorySelection, validateProductCategoryHierarchy } from '../../src/server/productCategoryHierarchy.js';
-import { categories, productPricingSettings, products } from '../../src/server/schema.js';
+import { authorizeAdmin } from '../auth.js';
+import { db } from '../db.js';
+import { mergeProductCategorySelection, validateProductCategoryHierarchy } from '../productCategoryHierarchy.js';
+import { categories, productPricingSettings, products } from '../schema.js';
 
 const allowedFields = new Set([
   'name', 'description', 'category', 'categoryId', 'subcategoryId', 'price',

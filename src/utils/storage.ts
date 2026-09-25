@@ -1,103 +1,39 @@
-import { supabase } from './supabaseClient';
+import { getAuthAccessToken, getNeonAuthSessionId } from './neonAuthClient';
 
-const STORAGE_BUCKET = 'product-images';
+const bucket = 'product-images';
 
-/**
- * Upload an image file to Supabase Storage
- * @param file - The image file to upload
- * @param path - Optional custom path within the bucket (defaults to auto-generated)
- * @returns The public URL of the uploaded image
- */
+async function storageRequest(body: Record<string, unknown>, method = 'POST') {
+  const token = await getAuthAccessToken();
+  if (!token) throw new Error('Sign in as an administrator to manage images');
+  const sessionId = await getNeonAuthSessionId();
+  const response = await fetch('/api/storage', {
+    method,
+    headers: { Authorization: `Bearer ${token}`, ...(sessionId ? { 'X-Neon-Session-Id': sessionId } : {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || `Storage request failed (${response.status})`);
+  return result as { url?: string };
+}
+
 export async function uploadImage(file: File, path?: string): Promise<string> {
-  try {
-    // Generate a unique filename if no path provided
-    const filename = path || `${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
-    
-    // Upload the file
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(filename, file, {
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (error) {
-      console.error('Storage upload error:', error);
-      throw new Error(`Failed to upload image: ${error.message}`);
-    }
-
-    // Get the public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from(STORAGE_BUCKET)
-      .getPublicUrl(data.path);
-
-    return publicUrl;
-  } catch (error) {
-    console.error('Error uploading image:', error);
-    throw error;
-  }
+  const objectPath = path || `${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  const result = await storageRequest({ bucket, path: objectPath, contentType: file.type || 'application/octet-stream', data: btoa(binary) });
+  if (!result.url) throw new Error('Storage upload returned no URL');
+  return result.url;
 }
 
-/**
- * Delete an image from Supabase Storage
- * @param url - The public URL or path of the image to delete
- */
 export async function deleteImage(url: string): Promise<void> {
-  try {
-    // Extract the path from the URL
-    const path = url.split(`${STORAGE_BUCKET}/`)[1];
-    if (!path) {
-      console.warn('Could not extract path from URL:', url);
-      return;
-    }
-
-    const { error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .remove([path]);
-
-    if (error) {
-      console.error('Storage delete error:', error);
-      throw new Error(`Failed to delete image: ${error.message}`);
-    }
-  } catch (error) {
-    console.error('Error deleting image:', error);
-    throw error;
-  }
+  const marker = `${bucket}/`;
+  const index = url.indexOf(marker);
+  if (index >= 0) await storageRequest({ bucket, path: url.slice(index + marker.length) }, 'DELETE');
 }
 
-/**
- * List all images in the storage bucket
- */
 export async function listImages(): Promise<string[]> {
-  try {
-    const { data, error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .list();
-
-    if (error) {
-      console.error('Storage list error:', error);
-      throw new Error(`Failed to list images: ${error.message}`);
-    }
-
-    return data.map(file => {
-      const { data: { publicUrl } } = supabase.storage
-        .from(STORAGE_BUCKET)
-        .getPublicUrl(file.name);
-      return publicUrl;
-    });
-  } catch (error) {
-    console.error('Error listing images:', error);
-    throw error;
-  }
+  throw new Error('Image listing is not exposed by the Neon Object Storage API');
 }
 
-/**
- * Get the public URL for an existing file in storage
- * @param path - The path to the file in the storage bucket
- */
-export function getPublicUrl(path: string): string {
-  const { data: { publicUrl } } = supabase.storage
-    .from(STORAGE_BUCKET)
-    .getPublicUrl(path);
-  return publicUrl;
-}
+export function getPublicUrl(path: string): string { return path; }

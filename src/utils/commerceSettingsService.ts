@@ -1,42 +1,46 @@
-import { supabase } from './supabaseClient';
+import { authenticatedApi } from './accountApi';
 
 export type PaymentMethodCode = 'card' | 'cash-on-delivery' | 'bank-transfer';
 export interface PaymentMethodSetting { code: PaymentMethodCode; name: string; description?: string | null; is_active: boolean; display_order: number; }
 export interface ProductPricingSetting { product_id: string; purchase_mode: 'price' | 'quote'; }
 
-const paymentFallback: PaymentMethodSetting[] = [{ code: 'card', name: 'Card Payment', description: 'Pay securely online by card.', is_active: true, display_order: 10 }];
-
 export const commerceSettingsService = {
   async getActivePaymentMethods(): Promise<PaymentMethodSetting[]> {
-    if (!supabase) return paymentFallback;
-    const { data, error } = await supabase.from('payment_methods').select('*').eq('is_active', true).order('display_order');
-    if (error) throw error;
-    return (data || []) as PaymentMethodSetting[];
+    const response = await fetch('/api/checkout/settings', { cache: 'no-store' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not load payment methods');
+    return (result.paymentMethods || []) as PaymentMethodSetting[];
   },
   async getAllPaymentMethods(): Promise<PaymentMethodSetting[]> {
-    const { data, error } = await supabase.from('payment_methods').select('*').order('display_order');
-    if (error) throw error;
-    return (data || []) as PaymentMethodSetting[];
+    const { paymentMethods } = await authenticatedApi<{ paymentMethods: PaymentMethodSetting[] }>(
+      '/api/checkout/settings', { query: { admin: 'payments' } },
+    );
+    return paymentMethods;
   },
   async savePaymentMethods(methods: PaymentMethodSetting[]) {
-    const { error } = await supabase.from('payment_methods').upsert(methods.map((method) => ({ ...method, updated_at: new Date().toISOString() })), { onConflict: 'code' });
-    if (error) throw error;
+    await authenticatedApi('/api/checkout/settings', {
+      method: 'PUT',
+      query: { admin: 'payments' },
+      body: { methods },
+    });
   },
   async getPricingSettings(): Promise<ProductPricingSetting[]> {
-    if (!supabase) return [];
-    const { data, error } = await supabase.from('product_pricing_settings').select('product_id,purchase_mode');
-    if (error) throw error;
-    return (data || []) as ProductPricingSetting[];
+    const { pricingSettings } = await authenticatedApi<{ pricingSettings: ProductPricingSetting[] }>(
+      '/api/checkout/settings', { query: { admin: 'pricing' } },
+    );
+    return pricingSettings;
   },
   async setProductPurchaseMode(productId: string, purchaseMode: 'price' | 'quote') {
-    const { error } = await supabase.from('product_pricing_settings').upsert({ product_id: productId, purchase_mode: purchaseMode, updated_at: new Date().toISOString() }, { onConflict: 'product_id' });
-    if (error) throw error;
+    await this.setProductPurchaseModes([productId], purchaseMode);
   },
   async setProductPurchaseModes(productIds: string[], purchaseMode: 'price' | 'quote') {
     if (productIds.length === 0) return;
-    const { error } = await supabase
-      .from('product_pricing_settings')
-      .upsert(productIds.map((product_id) => ({ product_id, purchase_mode: purchaseMode, updated_at: new Date().toISOString() })), { onConflict: 'product_id' });
-    if (error) throw error;
+    for (let start = 0; start < productIds.length; start += 500) {
+      await authenticatedApi('/api/checkout/settings', {
+        method: 'PUT',
+        query: { admin: 'pricing' },
+        body: { productIds: productIds.slice(start, start + 500), purchaseMode },
+      });
+    }
   },
 };

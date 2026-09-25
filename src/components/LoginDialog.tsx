@@ -67,8 +67,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
     setIsLoading(true);
 
     try {
-      if (config.useNeonAuth || config.useSupabase) {
-        console.log(`🔵 Using ${config.useNeonAuth ? 'Neon' : 'Supabase'} Auth`);
+      if (config.useNeonAuth) {
         const result = await authService.signIn(signInEmail, signInPassword);
         
         if (result.success && result.user) {
@@ -84,7 +83,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
         }
       } else {
         toast.error(import.meta.env.DEV
-          ? 'Configure Neon Auth or Supabase to sign in.'
+          ? 'Configure Neon Auth to sign in.'
           : 'Sign-in is temporarily unavailable. Please try again later.');
       }
     } catch (error) {
@@ -118,8 +117,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
     console.log('🔵 Starting sign up process for:', signUpEmail);
 
     try {
-      if (config.useNeonAuth || config.useSupabase) {
-        console.log(`🔵 Using ${config.useNeonAuth ? 'Neon' : 'Supabase'} Auth`);
+      if (config.useNeonAuth) {
         const result = await authService.signUp(signUpEmail, signUpPassword, {
           firstName,
           lastName,
@@ -143,7 +141,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
           toast.error(result.error || 'Failed to create account');
         }
       } else {
-        toast.error('Configure Neon Auth or Supabase to create a real account.');
+        toast.error('Account creation is temporarily unavailable.');
       }
     } catch (error) {
       console.error('❌ Sign up error:', error);
@@ -224,7 +222,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
     setIsLoading(true);
 
     try {
-      if (config.useNeonAuth || config.useSupabase) {
+      if (config.useNeonAuth) {
         console.log('🔵 Sending password reset email');
         const result = await authService.resetPassword(resetEmail);
         
@@ -361,7 +359,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
                 </Button>
               </div>
 
-              {(config.useNeonAuth || config.useSupabase) && (
+              {config.useNeonAuth && (
                 <div className="text-center">
                   <Button
                     type="button"
@@ -375,12 +373,6 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
                 </div>
               )}
               
-              {!config.useSupabase && !config.useNeonAuth && import.meta.env.DEV && (
-                <div className="text-center text-xs text-gray-600 mt-2">
-                  <div>Demo mode: Use any email/password</div>
-                  <div className="text-[#DC143C]">Administrator access is available by invitation.</div>
-                </div>
-              )}
             </form>
           </TabsContent>
           
@@ -458,7 +450,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
                 {isLoading ? 'Creating account...' : 'Create Account'}
               </Button>
               
-              {(config.useSupabase || config.useNeonAuth) && (
+              {config.useNeonAuth && (
                 <p className="text-xs text-center text-gray-600">
                   By creating an account, you'll receive a verification email
                 </p>
@@ -501,7 +493,7 @@ export function LoginDialog({ open, onOpenChange, onLogin }: LoginDialogProps) {
                 </Button>
               </div>
               
-              {(config.useSupabase || config.useNeonAuth) && (
+              {config.useNeonAuth && (
                 <p className="text-xs text-center text-gray-600">
                   We'll send you a link to reset your password
                 </p>

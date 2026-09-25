@@ -85,7 +85,7 @@ export function StripePaymentForm({
         <PaymentElement 
           options={{
             layout: 'tabs',
-            paymentMethodOrder: ['card', 'paypal'],
+            paymentMethodOrder: ['card'],
           }}
         />
       </div>

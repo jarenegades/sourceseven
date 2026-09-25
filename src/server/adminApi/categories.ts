@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { eq } from 'drizzle-orm';
-import { authorizeAdmin } from '../../src/server/auth.js';
-import { db } from '../../src/server/db.js';
-import { categories } from '../../src/server/schema.js';
+import { authorizeAdmin } from '../auth.js';
+import { db } from '../db.js';
+import { categories } from '../schema.js';
 
 const roots = new Set(['rolling-bearings', 'mounted-linear-units']);
 const idFromName = (name: string) => name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);

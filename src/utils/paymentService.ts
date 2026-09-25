@@ -1,5 +1,5 @@
 import { loadStripe, Stripe, StripeElements } from '@stripe/stripe-js';
-import { publicAnonKey } from './supabase/info';
+import { getAuthAccessToken, getNeonAuthSessionId } from './neonAuthClient';
 
 /**
  * Payment Service - Handles Stripe payment processing
@@ -14,8 +14,6 @@ import { publicAnonKey } from './supabase/info';
 // Stripe publishable key - replace with your actual key
 // For testing, use: pk_test_51xxxxx...
 const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const PAYMENT_INTENT_URL = `${SUPABASE_URL}/functions/v1/create-payment-intent`;
 
 let stripePromise: Promise<Stripe | null> | null = null;
 
@@ -37,15 +35,15 @@ export const getStripe = (): Promise<Stripe | null> => {
 /**
  * Check if Stripe is properly configured
  */
-export const isStripeConfigured = (): boolean => {
-  return !!STRIPE_PUBLISHABLE_KEY && !!SUPABASE_URL;
-};
+export const isStripeConfigured = (): boolean => !!STRIPE_PUBLISHABLE_KEY;
 
 export interface PaymentDetails {
-  amount: number; // Amount in cents (e.g., 1000 = $10.00)
+  amount?: number;
   currency: string; // e.g., 'usd'
   customerEmail: string;
   customerName: string;
+  shippingMethod: string;
+  checkoutAttemptId: string;
   description?: string;
   metadata?: Record<string, string>;
 }
@@ -55,6 +53,14 @@ export interface PaymentResponse {
   paymentIntentId?: string;
   error?: string;
   clientSecret?: string;
+  quote?: {
+    currency: string;
+    shippingMethod: string;
+    subtotal: number;
+    tax: number;
+    shippingCost: number;
+    total: number;
+  };
 }
 
 /**
@@ -63,18 +69,15 @@ export interface PaymentResponse {
  */
 export const createPaymentIntent = async (details: PaymentDetails): Promise<PaymentResponse> => {
   try {
-    if (!SUPABASE_URL) {
-      throw new Error('Supabase URL is not configured');
-    }
+    const token = await getAuthAccessToken();
+    const sessionId = await getNeonAuthSessionId();
+    if (!token) throw new Error('Please sign in again to continue checkout');
 
-    const response = await fetch(PAYMENT_INTENT_URL, {
+    const response = await fetch('/api/payments/create-intent', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': publicAnonKey,
-        'Authorization': `Bearer ${publicAnonKey}`,
-      },
-      body: JSON.stringify(details),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(sessionId ? { 'X-Neon-Session-Id': sessionId } : {}) },
+      body: JSON.stringify({ currency: details.currency, customerEmail: details.customerEmail, customerName: details.customerName, shippingMethod: details.shippingMethod, checkoutAttemptId: details.checkoutAttemptId }),
+      cache: 'no-store',
     });
 
     if (!response.ok) {
@@ -96,6 +99,7 @@ export const createPaymentIntent = async (details: PaymentDetails): Promise<Paym
       success: true,
       paymentIntentId: data.paymentIntentId,
       clientSecret: data.clientSecret,
+      quote: data.quote,
     };
   } catch (error: any) {
     console.error('Payment intent creation error:', error);
@@ -184,7 +188,7 @@ export const toCents = (amount: number): number => {
   return Math.round(amount * 100);
 };
 
-export const getPaymentIntentUrl = (): string => PAYMENT_INTENT_URL;
+export const getPaymentIntentUrl = (): string => '/api/payments/create-intent';
 
 /**
  * Test card numbers for Stripe testing:

@@ -109,7 +109,7 @@ function AppContent() {
   // Check for existing auth session on mount and listen for changes
   useEffect(() => {
     const checkSession = async () => {
-      if (!config.useSupabase && !config.useNeonAuth) return;
+      if (!config.useNeonAuth) return;
 
       const user = await authService.getCurrentUser();
       if (user) {
@@ -130,7 +130,6 @@ function AppContent() {
         setUserFirstName(user.user_metadata?.first_name || '');
         setIsAdmin(await authService.isAdmin());
         setShowLoginDialog(false);
-        toast.success(`Welcome back${user.user_metadata?.first_name ? `, ${user.user_metadata.first_name}` : ''}!`);
       } else {
         setIsLoggedIn(false);
         setUserEmail('');
@@ -139,7 +138,6 @@ function AppContent() {
         // Clear cart and wishlist on sign out
         setCartItems([]);
         setWishlistItems([]);
-        toast.success('Signed out successfully');
       }
     });
 
@@ -169,7 +167,7 @@ function AppContent() {
         // If it's a network error, show empty state but don't show error toast
         if (error.message?.includes('Failed to fetch') ||
           error.message?.includes('ERR_NAME_NOT_RESOLVED')) {
-          console.warn('⚠️ Network error: Cannot reach Supabase. App will work in offline mode.');
+          console.warn('Network error: Cannot load products.');
           setProducts([]); // Set empty products array
         }
         setProductsLoaded(true); // Still set to true to show empty state
@@ -398,7 +396,20 @@ function AppContent() {
         cartCount={cartItemCount}
         onLoginClick={handleLoginPrompt}
         onLogout={async () => {
-          await authService.signOut();
+          const result = await authService.signOut();
+          if (!result.success) {
+            toast.error(result.error || 'Could not sign out. Please try again.');
+            return;
+          }
+
+          // Update the UI immediately; the Neon Auth event remains the cross-tab fallback.
+          setIsLoggedIn(false);
+          setUserEmail('');
+          setUserFirstName('');
+          setIsAdmin(false);
+          setCartItems([]);
+          setWishlistItems([]);
+          toast.success('Signed out successfully');
         }}
         selectedCategory={selectedCategory}
         onCategoryChange={(category) => handleCategoryChange(category as ProductCategoryFilter)}
@@ -837,8 +848,12 @@ function AppContent() {
         open={showLoginDialog}
         onOpenChange={setShowLoginDialog}
         onLogin={(email, isAdmin) => {
-          // Login is handled by auth state change listener
-          console.log('Login successful:', email, isAdmin);
+          // Apply successful authentication immediately; the Neon Auth event is a backup.
+          setIsLoggedIn(true);
+          setUserEmail(email);
+          setUserFirstName('');
+          setIsAdmin(isAdmin);
+          setShowLoginDialog(false);
         }
         }
       />
