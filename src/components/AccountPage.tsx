@@ -7,11 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Switch } from './ui/switch';
 import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
 import { useState, useEffect } from 'react';
-import { supabase } from '../utils/supabaseClient';
+import { accountApi } from '../utils/accountApi';
 import { authService } from '../utils/authService';
-import { ordersService } from '../utils/ordersService';
-import { config } from '../utils/config';
-import { wishlistService } from '../utils/wishlistService';
 import { userService } from '../utils/userService';
 import { userNotificationPreferencesService } from '../utils/userNotificationPreferencesService';
 import { toast } from 'sonner';
@@ -70,12 +67,6 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
   const loadUserData = async () => {
     try {
       setLoading(true);
-      
-      if (!config.useSupabase) {
-        toast.error('Supabase is not enabled');
-        return;
-      }
-
       const user = await authService.getCurrentUser();
       
       if (!user?.id) {
@@ -86,19 +77,13 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
       setUserId(user.id);
 
       // Load user profile
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) throw profileError;
+      const profile = await userService.getProfile(user.id);
 
       if (profile) {
         setAccountInfo({
           firstName: profile.first_name || '',
           lastName: profile.last_name || '',
-          email: user.email || '',
+          email: profile.email || user.email || '',
           phone: profile.phone || '',
         });
 
@@ -117,19 +102,10 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
       }
 
       // Load default shipping address
-      const { data: addresses, error: addressError } = await supabase
-        .from('user_addresses')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_default', true)
-        .eq('address_type', 'shipping')
-        .limit(1);
-
-      // Handle address error gracefully (406 might mean no address exists or RLS issue)
-      if (addressError) {
-        console.warn('⚠️ Could not load address (this is OK if no address exists):', addressError);
-      } else if (addresses && addresses.length > 0) {
-        const address = addresses[0];
+      const { address } = await accountApi<{ address: {
+        street: string; city: string; state: string; zip_code: string; country: string;
+      } | null }>('addresses');
+      if (address) {
         setShippingAddress({
           street: address.street || '',
           city: address.city || '',
@@ -140,17 +116,17 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
       }
 
       // Load order stats
-      const stats = await ordersService.getStats(user.id);
+      const { stats } = await accountApi<{ stats: { total: number } }>('orders', { query: { stats: '1' } });
       setAccountStats(prev => ({
         ...prev,
         totalOrders: stats.total
       }));
 
       // Load wishlist count
-      const wishlistCount = await wishlistService.getCount(user.id);
+      const { items: wishlistItems } = await accountApi<{ items: unknown[] }>('wishlist');
       setAccountStats(prev => ({
         ...prev,
-        wishlistItems: wishlistCount
+        wishlistItems: wishlistItems.length
       }));
 
       const notificationPreferences = await userNotificationPreferencesService.get();
@@ -211,28 +187,12 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
     e.preventDefault();
     
     try {
-      if (!config.useSupabase) {
-        toast.error('Supabase is not enabled');
-        return;
-      }
-
-      const user = await authService.getCurrentUser();
-      if (!user?.id) {
-        toast.error('User not authenticated');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({
-          first_name: accountInfo.firstName,
-          last_name: accountInfo.lastName,
-          phone: accountInfo.phone,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
+        if (!userId) throw new Error('User not authenticated');
+        await userService.updateProfile(userId, {
+            first_name: accountInfo.firstName,
+            last_name: accountInfo.lastName,
+            phone: accountInfo.phone,
+        });
 
       toast.success('Profile updated successfully!');
       console.log('✅ Profile updated');
@@ -246,55 +206,16 @@ export function AccountPage({ onNavigateToOrders, onNavigateToWishlist, isAdmin,
     e.preventDefault();
     
     try {
-      const user = await authService.getCurrentUser();
-      if (!user?.id) {
-        toast.error('User not authenticated');
-        return;
-      }
-
-      // Check if default address exists
-      const { data: existingAddresses, error: checkError } = await supabase
-        .from('user_addresses')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_default', true)
-        .eq('address_type', 'shipping')
-        .limit(1);
-
-      const existing = existingAddresses && existingAddresses.length > 0 ? existingAddresses[0] : null;
-
-      if (existing) {
-        // Update existing address
-        const { error } = await supabase
-          .from('user_addresses')
-          .update({
-            street: shippingAddress.street,
-            city: shippingAddress.city,
-            state: shippingAddress.state,
-            zip_code: shippingAddress.zipCode,
-            country: shippingAddress.country,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existing.id);
-
-        if (error) throw error;
-      } else {
-        // Insert new address
-        const { error } = await supabase
-          .from('user_addresses')
-          .insert({
-            user_id: user.id,
-            address_type: 'shipping',
-            is_default: true,
-            street: shippingAddress.street,
-            city: shippingAddress.city,
-            state: shippingAddress.state,
-            zip_code: shippingAddress.zipCode,
-            country: shippingAddress.country
-          });
-
-        if (error) throw error;
-      }
+        await accountApi('addresses', {
+          method: 'PUT',
+          body: {
+              street: shippingAddress.street,
+              city: shippingAddress.city,
+              state: shippingAddress.state,
+              zip_code: shippingAddress.zipCode,
+              country: shippingAddress.country,
+          },
+        });
 
       toast.success('Address updated successfully!');
       console.log('✅ Address updated');

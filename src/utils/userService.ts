@@ -1,121 +1,51 @@
-import { supabase } from './supabaseClient';
+import { accountApi } from './accountApi';
 
 export interface UserProfile {
   id: string;
+  email: string | null;
   first_name: string | null;
   last_name: string | null;
   phone: string | null;
   avatar_url: string | null;
-  is_admin: boolean;
   created_at: string;
   updated_at: string;
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string'
+      ? resolve(reader.result)
+      : reject(new Error('Unable to read image file'));
+    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export const userService = {
-  /**
-   * Upload user avatar as base64 to user profile
-   */
-  async uploadAvatar(userId: string, file: File): Promise<string | null> {
-    try {
-      if (!file.type.startsWith('image/')) {
-        throw new Error('File must be an image');
-      }
-
-      // Check file size (max 2MB)
-      const maxSize = 2 * 1024 * 1024; // 2MB
-      if (file.size > maxSize) {
-        throw new Error('File size must be less than 2MB');
-      }
-
-      // Read file as base64
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-          try {
-            const base64Data = event.target?.result as string;
-
-            // Update user profile with avatar base64
-            const { error } = await supabase
-              .from('user_profiles')
-              .update({ avatar_url: base64Data })
-              .eq('id', userId);
-
-            if (error) throw error;
-
-            resolve(base64Data);
-          } catch (error) {
-            reject(error);
-          }
-        };
-        reader.onerror = () => {
-          reject(new Error('Failed to read file'));
-        };
-        reader.readAsDataURL(file);
-      });
-    } catch (error) {
-      console.error('Error uploading avatar:', error);
-      throw error;
-    }
+  async uploadAvatar(_userId: string, file: File): Promise<string | null> {
+    if (!file.type.startsWith('image/')) throw new Error('File must be an image');
+    if (file.size > 2 * 1024 * 1024) throw new Error('File size must be less than 2MB');
+    const avatarUrl = await readFileAsDataUrl(file);
+    const { profile } = await accountApi<{ profile: UserProfile }>('profile', {
+      method: 'PATCH', body: { avatar_url: avatarUrl },
+    });
+    return profile.avatar_url;
   },
 
-  /**
-   * Get user profile by ID
-   */
-  async getProfile(userId: string): Promise<UserProfile | null> {
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') return null; // No rows found
-        throw error;
-      }
-
-      return data;
-    } catch (error) {
-      console.error('Error fetching user profile:', error);
-      return null;
-    }
+  async getProfile(_userId: string): Promise<UserProfile | null> {
+    const { profile } = await accountApi<{ profile: UserProfile | null }>('profile');
+    return profile;
   },
 
-  /**
-   * Update user profile
-   */
-  async updateProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .update(updates)
-        .eq('id', userId)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Error updating user profile:', error);
-      throw error;
-    }
+  async updateProfile(_userId: string, updates: Partial<UserProfile>): Promise<UserProfile | null> {
+    const { profile } = await accountApi<{ profile: UserProfile | null }>('profile', {
+      method: 'PATCH', body: updates,
+    });
+    return profile;
   },
 
-  /**
-   * Delete user avatar
-   */
-  async deleteAvatar(userId: string): Promise<void> {
-    try {
-      // Remove avatar_url from profile
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ avatar_url: null })
-        .eq('id', userId);
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error deleting avatar:', error);
-      throw error;
-    }
-  }
+  async deleteAvatar(_userId: string): Promise<void> {
+    await accountApi('profile', { method: 'PATCH', body: { avatar_url: null } });
+  },
 };
